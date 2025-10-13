@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P00Qr Generator</title>
+    <link rel="stylesheet" href="./styles.css">
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+    <link href="https://fonts.googleapis.com/css?family=Fira+Mono:400,700&display=swap" rel="stylesheet">    
+</head>
+<body>
+    <div class="header">
+        <h1><sub>P</sub>00<sub>Qr</sub> Generator</h1>
+    </div>
+    <main>
+        <div id="code-label"></div>
+        <div id="qr"></div>
+        <div class="controls">
+            <div class="input-group">
+                <button id="decrease" aria-label="Decrease">−</button>
+                <input id="position" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" value="1" />
+                <button id="increase" aria-label="Increase">+</button>
+            </div>
+        </div>
+    </main>
+    <script src="./qrcode.js"></script>
+    <script src="./script.js"></script>
+</body>
+</html>
