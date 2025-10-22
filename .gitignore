@@ -1,0 +1,13 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs/parkrunPositionQrCode/copilot-chat/2df7c9b0/sessions
+/.vs/parkrunPositionQrCode/CopilotIndices
+/.vs/parkrunPositionQrCode/DesignTimeBuild
+/.vs/parkrunPositionQrCode/FileContentIndex
+/.vs/parkrunPositionQrCode/v17
+/.vs/ProjectEvaluation
+/backend/bin/Debug/net8.0
+/backend/obj
+/.vs/parkrunPositionQrCode
