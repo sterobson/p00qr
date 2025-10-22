@@ -1,0 +1,20 @@
+meta {
+  name: Negotiate
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{Endpoint}}/api/negotiate?code={{FunctionCode}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  code: {{FunctionCode}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

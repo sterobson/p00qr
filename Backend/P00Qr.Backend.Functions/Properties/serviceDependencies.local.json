@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "appInsights1": {
+      "type": "appInsights.sdk"
+    },
+    "signalr1": {
+      "serviceConnectorResourceId": "",
+      "secretStore": null,
+      "type": "signalr.function",
+      "connectionId": "Azure:SignalR:ConnectionString",
+      "dynamicId": null
+    }
+  }
+}

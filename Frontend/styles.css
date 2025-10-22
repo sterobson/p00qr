@@ -30,6 +30,23 @@ main {
     height: 100vh;
     width: 100vw;
     position: relative;
+
+    .token-title {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        
+        .hamburger {
+            font-size: 3.5rem;
+            margin-right: 1rem;
+            position: absolute;
+            transform: translateX(-40vw);
+
+            &.close {
+                transform: translateX(40vw);
+            }
+        }
+    }
 }
 
 .header {
@@ -47,7 +64,8 @@ main {
     }
 }
 
-#code-label {
+#code-label,
+#nocode-label {
     font-size: 2.8rem;
     font-weight: 700;
     color: #2e2966;
@@ -56,6 +74,10 @@ main {
     letter-spacing: 0.08em;
     min-height: 3.2rem;
     background: none;
+
+    &.hide {
+        display: none;
+    }
 }
 
 #qr {
@@ -70,11 +92,14 @@ main {
     border-radius: 1rem;
     margin-bottom: 7rem; /* Space for controls */
     overflow: hidden;
+
+    &.blur {
+        filter: blur(16px);
+        opacity: 0.6;
+    }
 }
 
 .controls {
-    position: fixed;
-    left: 0;
     bottom: 0;
     width: 100vw;
     padding: 4.5rem 0 2.5rem 0;
@@ -90,6 +115,7 @@ main {
 
 .input-group button {
     font-size: 2.5rem;
+    font-weight: bold;;
     width: 5rem;           /* wider */
     height: 4rem;
     margin: 0 1rem;
@@ -102,7 +128,15 @@ main {
     display: flex;
     align-items: center;
     justify-content: center;
+
+    &#takeNextToken,
+    &#resetEvent {
+        width: 80vw;
+        padding: 0 2rem;
+        font-size: 1.8rem;
+    }
 }
+
 
 .input-group button:active {
     background: #f41c5e
@@ -122,4 +156,31 @@ main {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Hamburger button */
+.hamburger {
+    font-size: 1.5rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    margin-left: 0.5rem;
+}
+
+/* Slide-in aside panel */
+aside {
+    position: fixed;
+    top: 0;
+    left: -100%; /* hidden by default */
+    width: 100%;
+    height: 100%;
+    background-color: #f4f4f4;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+    transition: left 0.5s ease;
+    z-index: 1000;
+}
+
+/* When visible */
+aside.open {
+    left: 0;
 }

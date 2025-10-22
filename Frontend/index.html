@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P00Qr Generator</title>
+    <link rel="stylesheet" href="./styles.css">
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+    <link href="https://fonts.googleapis.com/css?family=Fira+Mono:400,700&display=swap" rel="stylesheet">    
+</head>
+<body>
+    <div class="header">
+        <h1><sub>P</sub>00<sub>Qr</sub> Generator</h1>
+    </div>
+    <main>
+        <div class="token-title">
+            <button id="menuToggle" aria-label="Toggle menu" class="hamburger">☰</button>
+            <span id="code-label"></span>
+            <span id="nocode-label" class="hide">Take a token</span>
+        </div>
+        <div id="qr"></div>
+        <div class="controls">
+            <div class="input-group">
+                <button id="takeNextToken" aria-label="TakeNextToken">Give out next token</button>
+            </div>
+        </div>
+    </main>
+
+    <aside>
+        <div class="header">
+            <h1>Event settings.<sub>.</sub>.</h1>
+        </div>
+        <main>
+            <div class="token-title">
+                <button id="menuClose" aria-label="Toggle menu" class="hamburger close">🗙</button>
+                <span id="code-label"></span>
+            </div>
+
+            <div id="eventQr"></div>
+
+            <label for="position">Next token</label>
+            <div class="input-group">
+                <button id="decrease" aria-label="Decrease">−</button>
+                <input id="position" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" value="1" />
+                <button id="increase" aria-label="Increase">+</button>
+            </div>
+            
+            <div class="controls">
+                <div class="input-group">
+                    <button id="resetEvent" aria-label="ResetEvent">Reset event</button>
+                </div>
+            </div>
+            
+        </main>
+    </aside>
+
+    <script>
+        // window.FUNCTIONS_URL = 'https://sterobson-personal.azurewebsites.net';
+        window.FUNCTIONS_URL = 'http://localhost:7172'
+        window.FUNCTION_KEY = 'Loyl89meoaRFWgIOfjTjJdJg3ZN9WfGguoghClu2Kp2HAzFuESIjXw==';
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <script src="./scripts/qrcode.js"></script>
+    <script type="module" src="./scripts/_main.js"></script>
+</body>
+</html>
