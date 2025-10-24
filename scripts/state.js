@@ -24,10 +24,13 @@ export class StateService {
         document.cookie = `event=${cookieValue}; path=/; max-age=3600`;
     }
 
-    loadFromCookie() {
+    loadFromCookie(eventId) {
         const match = document.cookie.match(new RegExp('(^| )event=([^;]+)'));
         if(match) {
-            this.state.event = JSON.parse(decodeURIComponent(match[2]));
+            const loadedEvent = JSON.parse(decodeURIComponent(match[2]));
+            if(loadedEvent && loadedEvent.id == eventId) {
+                this.state.event = loadedEvent;
+            }
         }
     }
 

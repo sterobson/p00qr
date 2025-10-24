@@ -30,7 +30,7 @@ import { UIService } from './ui-service.js';
     new UIService(state, signalR);
     const stateService = new StateService(state);
 
-    stateService.loadFromCookie();
+    stateService.loadFromCookie(eventId);
 
     signalR.joinEvent();
 
