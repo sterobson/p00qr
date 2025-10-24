@@ -4,6 +4,7 @@
 :root {
   --slide-in-function: cubic-bezier(0.34, 1.56, 0.64, 1);
   --slide-in-duration: 0.5s;
+  --default-font-size: clamp(1rem, 10vw, 2rem);
 }
 
 html, body {
@@ -42,7 +43,7 @@ main, aside {
         justify-content: center;
         height: 4rem;
         .hamburger {
-            font-size: 3.5rem;
+            font-size: calc(var(--default-font-size) * 1.5);
             margin-right: 1rem;
             position: absolute;
             transform: translateX(-40vw);
@@ -67,20 +68,20 @@ h1 {
     text-align: center;
     color: #fff;
     font-family: 'Fira Mono', 'Montserrat', Arial, Helvetica, sans-serif;
-    font-size: 10vw;
+    font-size: var(--default-font-size);
     font-weight: 700;
     margin: 0;
     letter-spacing: 0.02em;
 
     aside & {
-        background: rgb(255, 163, 0);
-        color: #2e2966;
+        background: #f41c5e;
+        color: white;
     }
 }
 
 #code-label,
 #nocode-label {
-    font-size: 2.8rem;
+    font-size: calc(var(--default-font-size) * 1);
     font-weight: 700;
     text-align: center;
     margin: 2rem 0 1.2rem 0;
@@ -122,7 +123,7 @@ h1 {
 }
 
 button {
-    font-size: 2.0rem;
+    font-size: var(--default-font-size);
     font-weight: bold;;
     width: 80vw;
     height: 4rem;
@@ -132,7 +133,7 @@ button {
     background: rgb(255, 163, 0);
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    transition: background 0.2s;
+    transition: background 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -140,11 +141,11 @@ button {
 }
 
 button:active {
-    background: #f41c5e
+    background: #f41c5e;
 }
 
 input {
-    font-size: 2rem;
+    font-size: var(--default-font-size);
     width: 80vw;           
     height: 4rem;          /* match button height */
     text-align: center;
@@ -158,10 +159,14 @@ input {
     justify-content: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     margin: 0 0 1rem 0;
+
+    &::placeholder {
+        color: #ccc;
+    }
 }
 
 label {
-    font-size: 2rem;
+    font-size: calc(var(--default-font-size) * 0.8);
     margin-top: 1rem;
     width: 80vw;           
 }
@@ -238,13 +243,13 @@ aside.open {
         display: flex;
         flex-direction: row;;
         .modal-icon {
-            font-size: 4rem;
+            font-size: calc(var(--default-font-size) * 2);
             margin-bottom: 1rem;
             align-self: center;
         }
 
         p {
-            font-size: 1.5rem;
+            font-size: calc(var(--default-font-size) * 0.7);
             color: #333;
             margin-bottom: 2rem;
         }

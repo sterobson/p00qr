@@ -19,7 +19,6 @@ export class StateService {
     }
 
     saveToCookie() {
-        console.log(this.state);
         const cookieValue = encodeURIComponent(JSON.stringify(this.state.event));
         document.cookie = `event=${cookieValue}; path=/; max-age=3600`;
     }

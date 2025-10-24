@@ -159,17 +159,17 @@ export class UIService {
 
     displayNextToken() {
         if(this.state.event.nextToken == 0) {
-            document.getElementById('current-next-position').innerText = 'None';
             this.takeNextBtn.textContent = 'Give next token';
+            this.positionInput.placeholder = '';
         } else {
-            document.getElementById('current-next-position').innerText = 'P' + this.pad(this.state.event.nextToken);
             this.takeNextBtn.textContent = 'Give token P' + this.pad(this.state.event.nextToken);
+            this.positionInput.placeholder = this.state.event.nextToken;
         }
     }
 
     updateEventQR() {
-        const domainplusPath = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
-        const raw = `${domainplusPath}?eventId=${encodeURIComponent(this.state.event.id)}`;
+        const domainPlusPath = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
+        const raw = `${domainPlusPath}?eventId=${encodeURIComponent(this.state.event.id)}`;
         this.renderQR(this.eventQrDiv, raw);
     }
 
