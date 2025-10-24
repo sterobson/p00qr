@@ -152,7 +152,8 @@ export class UIService {
     }
 
     updateEventQR() {
-        const raw = `http://127.0.0.1:5500?eventId=${encodeURIComponent(this.state.event.id)}`;
+        const domainplusPath = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
+        const raw = `${domainplusPath}?eventId=${encodeURIComponent(this.state.event.id)}`;
         this.renderQR(this.eventQrDiv, raw);
     }
 
@@ -163,6 +164,7 @@ export class UIService {
                 : 1;
             val = Math.min(val, 9999);
             this.state.event.currentToken = val;
+            console.log(`Taking next token: P${this.pad(val)}`);
             this.signalR.sendPositionUsed(val);
         });
 
