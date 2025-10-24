@@ -33,28 +33,39 @@ export class SignalRService {
         // A position has been used by a device in this event. Update our next position,
         // but only if needed.
         this.state.hubConnection.on('positionUsed', (eventId, position) => {
-            console.log('positionUsed:', eventId, position);
-            
             // If the current max value is less than the position just used, update it.
-            this.state.nextSyncPosition = Math.max(this.state.nextSyncPosition, position + 1);
+            this.state.event.nextToken = Math.max(this.state.event.nextToken, position + 1);
+            console.log('positionUsed:', eventId, position, this.state);
         });
 
         // The event has been reset to a certain position. Set that as the next position, and
         // set the current value to 0 so we don't get multiple devices with the same token.
         this.state.hubConnection.on('resetEvent', (eventId) => {
-            console.log('resetevent:', eventId);
-            
-            this.state.nextSyncPosition = 1;
-            this.state.currentValue = 0;
+            this.state.event.nextToken = 1;
+            this.state.event.currentToken = 0;
+            console.log('resetevent:', eventId, this.state);
         });
 
         // A new device has been added to an event. Everyone sends their current state so it
         // definitely syncs up.
         this.state.hubConnection.on('deviceAddedToEvent', (eventId) => {
-            console.log('deviceAddedToEvent:', eventId);
+            if(this.state.event.nextToken || this.state.event.name) {
+                this.sendEventDetails(this.state.event.name, this.state.event.nextToken);
+            }
+            console.log('deviceAddedToEvent:', eventId, this.state);
+        });
+
+        // The event's details have been updated, possibly by another device.
+        this.state.hubConnection.on('setEventDetails', (eventId, eventName, nextPosition) => {
             
-            this.sendPositionUsed(this.state.nextSyncPosition);
-            this.state.nextSyncPosition = position;
+            this.state.event.name = eventName || 'Unnamed Event';
+            
+            const num = Number(nextPosition);
+            if(Number.isInteger(num) && num > 0) {
+                this.state.event.nextToken = num;
+                this.state.event.currentToken = 0;
+            }
+            console.log('setEventDetails:', eventId, this.state);
         });
 
         await this.state.hubConnection.start();
@@ -74,10 +85,23 @@ export class SignalRService {
         if (!res.ok) throw new Error('AddToGroup failed: ' + res.status);
     }
 
+    async removeFromGroup(groupName) {
+        const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
+        const url = new URL('/api/RemoveFromGroup', base);
+        url.searchParams.set('eventId', groupName);
+        url.searchParams.set('connectionId', this.state.hubConnection.connection.connectionId);
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (window.FUNCTION_KEY) headers['x-functions-key'] = window.FUNCTION_KEY;
+
+        const res = await fetch(url.toString(), { method: 'POST', headers });
+        if (!res.ok) throw new Error('RemoveFromGroup failed: ' + res.status);
+    }
+
     async sendPositionUsed(position) {
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         const url = new URL('/api/SendPositionUsed', base);
-        url.searchParams.set('eventId', this.state.eventId);
+        url.searchParams.set('eventId', this.state.event.id);
         url.searchParams.set('position', position);
 
         const headers = { 'Content-Type': 'application/json' };
@@ -90,7 +114,7 @@ export class SignalRService {
     async joinEvent() {
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         const url = new URL('/api/JoinEvent', base);
-        url.searchParams.set('eventId', this.state.eventId);
+        url.searchParams.set('eventId', this.state.event.id);
 
         const headers = { 'Content-Type': 'application/json' };
         if (window.FUNCTION_KEY) headers['x-functions-key'] = window.FUNCTION_KEY;
@@ -99,18 +123,35 @@ export class SignalRService {
         if (!res.ok) throw new Error('JoinEvent failed: ' + res.status);
 
         // If we're joining an event then we want to zero out the current position.
-        this.state.currentValue = 0;
+        this.state.event.currentToken = 0;
     }
 
     async resetEvent() {
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         const url = new URL('/api/ResetEvent', base);
-        url.searchParams.set('eventId', this.state.eventId);
+        url.searchParams.set('eventId', this.state.event.id);
 
         const headers = { 'Content-Type': 'application/json' };
         if (window.FUNCTION_KEY) headers['x-functions-key'] = window.FUNCTION_KEY;
 
         const res = await fetch(url.toString(), { method: 'POST', headers });
         if (!res.ok) throw new Error('ResetEvent failed: ' + res.status);
-    }    
+    }
+
+    async sendEventDetails(eventName, nextPosition) {
+        const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
+        const url = new URL('/api/SendEventDetails', base);
+        url.searchParams.set('eventId', this.state.event.id);
+        url.searchParams.set('eventName', eventName);
+        if(nextPosition) {
+            url.searchParams.set('nextPosition', nextPosition);
+        }
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (window.FUNCTION_KEY) headers['x-functions-key'] = window.FUNCTION_KEY;
+
+        const res = await fetch(url.toString(), { method: 'POST', headers });
+        if (!res.ok) throw new Error('SendEventDetils failed: ' + res.status);
+    }
+
 }

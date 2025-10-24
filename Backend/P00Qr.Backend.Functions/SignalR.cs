@@ -31,7 +31,7 @@ public class SignalR
         return response;
     }
 
-    [Function("addToGroup")]
+    [Function(nameof(AddToGroup))]
     public async Task<HttpResponseData> AddToGroup(
         [HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData req,
         [FromQuery] string eventId,
@@ -47,6 +47,27 @@ public class SignalR
         IServiceHubContext hubContext = await _serviceManager.CreateHubContextAsync(P00QrHubName);
 
         await hubContext.Groups.AddToGroupAsync(connectionId, eventId);
+
+        HttpResponseData response = req.CreateResponse(HttpStatusCode.OK);
+        return response;
+    }
+
+    [Function(nameof(RemoveFromGroup))]
+    public async Task<HttpResponseData> RemoveFromGroup(
+    [HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData req,
+    [FromQuery] string eventId,
+    [FromQuery] string connectionId)
+    {
+        if (string.IsNullOrEmpty(connectionId) || string.IsNullOrEmpty(eventId))
+        {
+            HttpResponseData badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+            await badResponse.WriteStringAsync("Please provide both connectionId and eventId.");
+            return badResponse;
+        }
+
+        IServiceHubContext hubContext = await _serviceManager.CreateHubContextAsync(P00QrHubName);
+
+        await hubContext.Groups.RemoveFromGroupAsync(connectionId, eventId);
 
         HttpResponseData response = req.CreateResponse(HttpStatusCode.OK);
         return response;
@@ -91,4 +112,21 @@ public class SignalR
             GroupName = eventId
         };
     }
+
+    [Function(nameof(SendEventDetails))]
+    [SignalROutput(HubName = P00QrHubName)]
+    public static async Task<SignalRMessageAction> SendEventDetails(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
+        [FromQuery] string eventId,
+        [FromQuery] string eventName,
+        [FromQuery] int? nextPosition
+        )
+    {
+        return new SignalRMessageAction("setEventDetails")
+        {
+            Arguments = [eventId, eventName, nextPosition ?? -1],
+            GroupName = eventId
+        };
+    }
+
 }

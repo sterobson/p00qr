@@ -1,11 +1,15 @@
-import { state } from './state.js';
+import { state, StateService } from './state.js';
 import { SignalRService } from './signalr-service.js';
 import { UIService } from './ui-service.js';
 
 (async () => {
 
     const urlParams = new URLSearchParams(window.location.search);
-    let eventId = atob(urlParams.get('eventId'));
+    let eventId = urlParams.get('eventId');
+    if(eventId){
+        eventId = atob(eventId);
+    }
+
     if(!eventId) {
         let expiryDate = new Date();
         expiryDate.setHours(expiryDate.getHours() + 12);
@@ -16,21 +20,26 @@ import { UIService } from './ui-service.js';
         window.history.replaceState({}, '', url);
     }
 
-    state.eventId = eventId;
-    console.log(state.eventId);
+    state.event.id = eventId;
+    console.log(state.event.id);
 
     const signalR = new SignalRService(state);
     await signalR.startHub();
-    await signalR.addToGroup(state.eventId);
+    await signalR.addToGroup(state.event.id);
 
     new UIService(state, signalR);
+    const stateService = new StateService(state);
+
+    stateService.loadFromCookie();
+
+    signalR.joinEvent();
 
     function generateExpiringEventId(expireDate = new Date()) {
         // Round to the nearest hour
         expireDate.setMinutes(0, 0, 0);
 
-        const timestamp = expireDate.toISOString().replace(/[-:T]/g, '').slice(0, 10); // YYYYMMDDHH
-        const random = Math.random().toString(36).slice(2, 8); // 6-char random string
-        return `${random}-${timestamp}`;
+        const timestamp = expireDate.toISOString().replace(/[-:T]/g, '').slice(2, 10); // YYMMDDHH
+        const random = Math.random().toString(36).slice(4, 8); // 4-char random string
+        return `${random}${timestamp}`;
     }
 })();

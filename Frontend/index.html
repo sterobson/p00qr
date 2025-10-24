@@ -9,56 +9,95 @@
     <link href="https://fonts.googleapis.com/css?family=Fira+Mono:400,700&display=swap" rel="stylesheet">    
 </head>
 <body>
-    <div class="header">
-        <h1><sub>P</sub>00<sub>Qr</sub> Generator</h1>
-    </div>
     <main>
-        <div class="token-title">
-            <button id="menuToggle" aria-label="Toggle menu" class="hamburger">☰</button>
+        <h1><sub>P</sub>00<sub>Qr</sub> Generator</h1>
+
+        <div class="top-row">
+            <button id="menuToggle" opens="menu" class="hamburger">☰</button>
             <span id="code-label"></span>
             <span id="nocode-label" class="hide">Take a token</span>
         </div>
         <div id="qr"></div>
         <div class="controls">
             <div class="input-group">
-                <button id="takeNextToken" aria-label="TakeNextToken">Give out next token</button>
+                <button id="takeNextToken" aria-label="TakeNextToken">Give next token</button>
             </div>
         </div>
     </main>
 
-    <aside>
-        <div class="header">
-            <h1>Event settings.<sub>.</sub>.</h1>
+    <aside id="menu">
+        <h1>Menu</h1>
+        <div class="top-row">
+            <button id="menuClose" closes="menu" class="hamburger close-menu">🗙</button>
         </div>
+
+        <button id="event-share-button" opens="event-share-menu">Share event</button>
+        <button id="event-settings-open" opens="event-settings-menu">Event settings</button>
+
+    </aside>
+
+    <aside id="event-share-menu">
+        <h1>Share</h1>
         <main>
-            <div class="token-title">
-                <button id="menuClose" aria-label="Toggle menu" class="hamburger close">🗙</button>
-                <span id="code-label"></span>
+            <div class="top-row">
+                <button id="event-settings-close" closes="event-share-menu" class="hamburger close-menu">🗙</button>
             </div>
 
+            <label>Scan this QR code to share the current event</label>
             <div id="eventQr"></div>
-
-            <label for="position">Next token</label>
-            <div class="input-group">
-                <button id="decrease" aria-label="Decrease">−</button>
-                <input id="position" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" value="1" />
-                <button id="increase" aria-label="Increase">+</button>
-            </div>
-            
-            <div class="controls">
-                <div class="input-group">
-                    <button id="resetEvent" aria-label="ResetEvent">Reset event</button>
-                </div>
-            </div>
-            
         </main>
     </aside>
+
+    <aside id="event-settings-menu">
+        <h1>Event settings</h1>
+        <main>
+            <div class="top-row">
+                <button id="event-settings-close" closes="event-settings-menu" class="hamburger close-menu">🗙</button>
+            </div>
+
+            <label for="event-name">
+                Event name
+            </label>
+            <input id="event-name-input" type="text" maxlength="20" />
+            
+            <label for="position">Set next token (<span id="current-next-position"></span>)</label>
+            <input id="position" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" value="" />
+            <button id="save-event-settings">Save</button>
+            <button id="save-new-event-settings">Save as new event</button>
+        </main>
+    </aside>    
+
+    <div id="modal" class="modal-backdrop hidden">
+        <div class="modal">
+            <div class="modal-text">
+                <div id="confirm-icon" class="modal-icon">⚠️</div>
+                <p id="confirm-text">Are you sure you want to reset the event? This will affect all linked devices.</p>
+            </div>
+            <div class="modal-buttons">
+                <button id="confirm-button-1">Yes</button>
+                <button id="confirm-button-2">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="alert" class="modal-backdrop hidden">
+        <div class="modal">
+            <div class="modal-text">
+                <div id="alert-icon" class="modal-icon">⚠️</div>
+                <p id="alert-text">Are you sure you want to reset the event? This will affect all linked devices.</p>
+            </div>
+            <div class="modal-buttons">
+                <button id="alert-button">Ok</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         // window.FUNCTIONS_URL = 'https://sterobson-personal.azurewebsites.net';
         window.FUNCTIONS_URL = 'http://localhost:7172'
         window.FUNCTION_KEY = 'Loyl89meoaRFWgIOfjTjJdJg3ZN9WfGguoghClu2Kp2HAzFuESIjXw==';
     </script>
+    
     <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
     <script src="./scripts/qrcode.js"></script>
     <script type="module" src="./scripts/_main.js"></script>
