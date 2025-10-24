@@ -23,6 +23,10 @@ export class UIService {
 
         document.getElementById('event-name-input').value = state.event.name;
 
+        this.watch(() => state.event.id, (newValue) => {
+            this.updateEventQR();
+        });
+
         this.watch(() => state.event.name, (newValue) => {
             document.getElementById('event-name-input').value = newValue;
         });
