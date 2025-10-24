@@ -61,7 +61,7 @@ export class SignalRService {
             this.state.event.name = eventName || 'Unnamed Event';
             
             const num = Number(nextPosition);
-            if(Number.isInteger(num) && num > 0) {
+            if(Number.isInteger(num) && num > 0 && this.state.event.nextToken != num) {
                 this.state.event.nextToken = num;
                 this.state.event.currentToken = 0;
             }

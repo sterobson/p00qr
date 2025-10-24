@@ -13,7 +13,7 @@ import { UIService } from './ui-service.js';
     if(!eventId) {
         let expiryDate = new Date();
         expiryDate.setHours(expiryDate.getHours() + 12);
-        eventId = generateExpiringEventId(expiryDate);
+        eventId = getNewEventId();
 
         const url = new URL(window.location);
         url.searchParams.set('eventId', btoa(eventId));
@@ -34,12 +34,7 @@ import { UIService } from './ui-service.js';
 
     signalR.joinEvent();
 
-    function generateExpiringEventId(expireDate = new Date()) {
-        // Round to the nearest hour
-        expireDate.setMinutes(0, 0, 0);
-
-        const timestamp = expireDate.toISOString().replace(/[-:T]/g, '').slice(2, 10); // YYMMDDHH
-        const random = Math.random().toString(36).slice(4, 8); // 4-char random string
-        return `${random}${timestamp}`;
+    function getNewEventId() {
+        return Math.random().toString(36).slice(2, 8); // 6-char random string
     }
 })();

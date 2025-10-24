@@ -42,7 +42,7 @@ export class UIService {
     saveEventDetails(saveAsNew = false) {
         const newName = document.getElementById('event-name-input').value.trim();
         const nextPosition = document.getElementById('position').value.trim();
-        
+
         if(nextPosition !== "") {
             if(!this.isIntegerLike(nextPosition) || nextPosition < 1 || nextPosition > 9999) {
                 this.alert('The next token must be a whole number between 1 and 9999, or left blank', '❌');
@@ -51,17 +51,33 @@ export class UIService {
         }
 
         if(saveAsNew) {
-            if(this.state.event.nextToken > 1 || this.state.event.currentToken > 0) {
-                this.confirm('You are about to leave the existing event and create a new one. Are you sure you want to proceed?', '❔', () => {
-                    this.state.event = {
-                        id: '34567890',
-                        name: newName || 'New event',
-                        currentToken: 0,
-                        nextToken: this.clamp(nextPosition ?? 1)
-                    }
- 
-                    document.getElementById('event-settings-menu').classList.remove('open');
+
+            function saveAsNewEventAndCloseMenus(state, signalRService) {
+                const oldId = state.event.id;
+                state.event = {
+                    id: Math.random().toString(36).slice(2, 8), // 6-char random string,
+                    name: newName || 'New event',
+                    currentToken: 0,
+                    nextToken: nextPosition || 1
+                }
+
+                // Update the URL
+                const url = new URL(window.location);
+                url.searchParams.set('eventId', btoa(state.event.id));
+                window.history.replaceState({}, '', url);
+
+                signalRService.removeFromGroup(oldId).then(() => {
+                    signalRService.addToGroup(state.event.id).then(() => {
+                        document.getElementById('event-settings-menu').classList.remove('open');
+                        document.getElementById('menu').classList.remove('open');
+                    });
                 });
+            }
+
+            if(this.state.event.nextToken > 1 || this.state.event.currentToken > 0) {
+                this.confirm('You are about to leave the existing event and create a new one. Are you sure you want to proceed?', '❔', () => saveAsNewEventAndCloseMenus(this.state, this.signalR));
+            } else {
+                saveAsNewEventAndCloseMenus(this.state, this.signalR);
             }
 
             return;
@@ -159,6 +175,7 @@ export class UIService {
 
     setupListeners() {
         this.takeNextBtn.addEventListener('click', () => {
+            console.log(this.state);
             let val = this.state.event.nextToken > 0
                 ? this.state.event.nextToken
                 : 1;
