@@ -173,7 +173,7 @@ export class UIService {
 
     updateEventQR() {
         const domainPlusPath = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
-        const raw = `${domainPlusPath}?eventId=${encodeURIComponent(this.state.event.id)}`;
+        const raw = `${domainPlusPath}?eventId=${encodeURIComponent(btoa(this.state.event.id))}`;
         this.renderQR(this.eventQrDiv, raw);
     }
 
