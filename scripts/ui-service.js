@@ -39,6 +39,12 @@ export class UIService {
             this.displayNextToken();
         });
 
+        this.watch(() => this.eventSettingsMenu.classList.contains('open'), (isOpen) => {
+            if(!isOpen) {
+                this.positionInput.value = '';
+            }
+        });
+
         document.getElementById('save-event-settings').addEventListener('click', () => this.saveEventDetails(false));
         document.getElementById('save-new-event-settings').addEventListener('click', () => this.saveEventDetails(true));
     }
@@ -67,7 +73,7 @@ export class UIService {
 
                 // Update the URL
                 const url = new URL(window.location);
-                url.searchParams.set('eventId', btoa(state.event.id));
+                url.searchParams.set('eventId', state.event.id);
                 window.history.replaceState({}, '', url);
 
                 signalRService.removeFromGroup(oldId).then(() => {
@@ -173,7 +179,7 @@ export class UIService {
 
     updateEventQR() {
         const domainPlusPath = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
-        const raw = `${domainPlusPath}?eventId=${encodeURIComponent(btoa(this.state.event.id))}`;
+        const raw = `${domainPlusPath}?eventId=${encodeURIComponent(this.state.event.id)}`;
         this.renderQR(this.eventQrDiv, raw);
     }
 

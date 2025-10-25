@@ -7,7 +7,7 @@ import { UIService } from './ui-service.js';
     const urlParams = new URLSearchParams(window.location.search);
     let eventId = urlParams.get('eventId');
     if(eventId){
-        eventId = atob(eventId);
+        eventId = eventId;
     }
 
     if(!eventId) {
@@ -16,7 +16,7 @@ import { UIService } from './ui-service.js';
         eventId = getNewEventId();
 
         const url = new URL(window.location);
-        url.searchParams.set('eventId', btoa(eventId));
+        url.searchParams.set('eventId', eventId);
         window.history.replaceState({}, '', url);
     }
 

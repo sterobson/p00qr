@@ -61,6 +61,13 @@ main, aside {
     }
 }
 
+button svg {
+    width: auto;
+    height: 80%;
+    float: left;
+    display: block;
+}
+
 h1 {
     width: 100vw;
     background: #2e2966;
@@ -137,7 +144,7 @@ button {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 2rem;
+
 }
 
 button:active {
