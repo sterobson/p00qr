@@ -109,7 +109,7 @@ export class SignalRService {
                     // then the winner is whoever has the latest messageSourceId. It's as good a method
                     // as anything else really. The loser(s) have their current token wiped out, so that
                     // we don't accidentally scan the same token twice.
-                    if(token == this.state.event.currentToken) {
+                    if(token + 1 == this.state.event.currentToken) {
                         if(messageSourceId < this._messageSouceId){
                             console.warn(`Conflict detected! This device lost out to ${messageSourceId}`);
                             this.state.event.currentToken = 0;
