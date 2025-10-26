@@ -45,6 +45,22 @@ export class UIService {
             }
         });
 
+        this.watch(() => this.signalR.getIsConnected(), (isConnected) => {
+            const elements = document.getElementsByClassName('connection-state-disconnected');
+
+            for (const el of elements) {
+                if(isConnected) {
+                    el.classList.add('hidden');
+                } else {
+                    el.classList.remove('hidden');
+                }
+            }
+
+            if(!isConnected) {
+                this.signalR.ensureConnectedToEvent();
+            }
+        });
+
         document.getElementById('save-event-settings').addEventListener('click', () => this.saveEventDetails(false));
         document.getElementById('save-new-event-settings').addEventListener('click', () => this.saveEventDetails(true));
     }
@@ -76,11 +92,9 @@ export class UIService {
                 url.searchParams.set('eventId', state.event.id);
                 window.history.replaceState({}, '', url);
 
-                signalRService.removeFromGroup(oldId).then(() => {
-                    signalRService.addToGroup(state.event.id).then(() => {
-                        document.getElementById('event-settings-menu').classList.remove('open');
-                        document.getElementById('menu').classList.remove('open');
-                    });
+                signalRService.ensureConnectedToEvent().then(() => {
+                    document.getElementById('event-settings-menu').classList.remove('open');
+                    document.getElementById('menu').classList.remove('open');
                 });
             }
 
@@ -228,14 +242,17 @@ export class UIService {
     }
 
     watch(getter, callback) {
+        let hasChecked = false;
         let lastValue = getter();
 
         function check() {
             let currentValue = getter();
-            if (currentValue !== lastValue) {
+            if (currentValue !== lastValue || !hasChecked) {
                 lastValue = currentValue;
                 callback(currentValue);
             }
+            
+            hasChecked = true;
             requestAnimationFrame(check);
         }
 

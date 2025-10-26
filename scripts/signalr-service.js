@@ -3,9 +3,48 @@ import { state } from './state.js';
 export class SignalRService {
     constructor(state) {
         this.state = state;
+        this.connectedEventId = null;
+        this._connectLock = null;
     }
 
-    async negotiate() {
+    getIsConnected() {
+        return this.state.hubConnection && this.state.hubConnection.state == signalR.HubConnectionState.Connected; 
+    }
+
+    async ensureConnectedToEvent() {
+        // If a connection is already in progress, wait for it to finish
+        if(this._connectLock) {
+            await this._connectLock;
+            return;
+        }
+
+        let resolveLock;
+        this._connectLock = new Promise(resolve => (resolveLock = resolve));
+
+        try {
+            if (!this.getIsConnected()) {
+                await this._startHub();
+                this.connectedEventId = null;
+            }
+
+            if(this.connectedEventId !== this.state.event.id) {
+                // If the connection is already in a different group, remove it first, otherwise we might get
+                // messages for multiple events, which isn't ideal.
+                if(this.connectedEventId) {
+                    await this._removeFromGroup(this.connectedEventId);
+                }
+
+                await this._addToGroup(this.state.event.id);
+                await this._joinEvent();
+                this.connectedEventId = this.state.event.id;
+            }
+        } finally {
+            resolveLock();
+            this._connectLock = null;
+        }
+    }
+
+    async _negotiate() {
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         let url = new URL('/api/negotiate', base);
         if (window.FUNCTION_KEY) url += '?code=' + encodeURIComponent(window.FUNCTION_KEY);
@@ -15,20 +54,25 @@ export class SignalRService {
         return await res.json();
     }
 
-    async startHub() {
+    async _startHub() {
         if (typeof signalR === 'undefined') {
             console.warn('SignalR client not loaded.');
             return;
         }
 
-        const info = await this.negotiate();
+        const info = await this._negotiate();
         const accessToken = info.accessToken || info.AccessToken || '';
         const hubUrl = info.url || info.Url;
 
         this.state.hubConnection = new signalR.HubConnectionBuilder()
             .withUrl(hubUrl, { accessTokenFactory: () => accessToken })
-            .withAutomaticReconnect()
+            // These are the number of milliseconds to wait 
+            .withAutomaticReconnect([0, 2000, 2000, 2000, 5000, 10000])
             .build();
+
+        this.state.hubConnection.onclose(() => {
+            this.isConnected = false;
+        });
 
         // A position has been used by a device in this event. Update our next position,
         // but only if needed.
@@ -36,7 +80,7 @@ export class SignalRService {
             // If the current max value is less than the position just used, update it.
             this.state.event.nextToken = Math.max(this.state.event.nextToken, position + 1);
             console.log('positionUsed:', eventId, position, this.state);
-        });
+        }); 
 
         // The event has been reset to a certain position. Set that as the next position, and
         // set the current value to 0 so we don't get multiple devices with the same token.
@@ -69,10 +113,11 @@ export class SignalRService {
         });
 
         await this.state.hubConnection.start();
+
         console.info('SignalR connected.');
     }
 
-    async addToGroup(groupName) {
+    async _addToGroup(groupName) {
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         const url = new URL('/api/AddToGroup', base);
         url.searchParams.set('eventId', groupName);
@@ -85,7 +130,7 @@ export class SignalRService {
         if (!res.ok) throw new Error('AddToGroup failed: ' + res.status);
     }
 
-    async removeFromGroup(groupName) {
+    async _removeFromGroup(groupName) {
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         const url = new URL('/api/RemoveFromGroup', base);
         url.searchParams.set('eventId', groupName);
@@ -99,6 +144,8 @@ export class SignalRService {
     }
 
     async sendPositionUsed(position) {
+        await this.ensureConnectedToEvent(this.state.event.id);
+
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         const url = new URL('/api/SendPositionUsed', base);
         url.searchParams.set('eventId', this.state.event.id);
@@ -111,7 +158,7 @@ export class SignalRService {
         if (!res.ok) throw new Error('SendPositionUsed failed: ' + res.status);
     }
 
-    async joinEvent() {
+    async _joinEvent() {
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         const url = new URL('/api/JoinEvent', base);
         url.searchParams.set('eventId', this.state.event.id);
@@ -127,6 +174,8 @@ export class SignalRService {
     }
 
     async resetEvent() {
+        await this.ensureConnectedToEvent(this.state.event.id);
+
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         const url = new URL('/api/ResetEvent', base);
         url.searchParams.set('eventId', this.state.event.id);
@@ -139,6 +188,8 @@ export class SignalRService {
     }
 
     async sendEventDetails(eventName, nextPosition) {
+        await this.ensureConnectedToEvent(this.state.event.id);
+
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         const url = new URL('/api/SendEventDetails', base);
         url.searchParams.set('eventId', this.state.event.id);
@@ -153,5 +204,4 @@ export class SignalRService {
         const res = await fetch(url.toString(), { method: 'POST', headers });
         if (!res.ok) throw new Error('SendEventDetils failed: ' + res.status);
     }
-
 }

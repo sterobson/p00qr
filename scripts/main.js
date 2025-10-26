@@ -24,15 +24,12 @@ import { UIService } from './ui-service.js';
     console.log(state.event.id);
 
     const signalR = new SignalRService(state);
-    await signalR.startHub();
-    await signalR.addToGroup(state.event.id);
+    await signalR.ensureConnectedToEvent();
 
     new UIService(state, signalR);
     const stateService = new StateService(state);
 
     stateService.loadFromCookie(eventId);
-
-    signalR.joinEvent();
 
     function getNewEventId() {
         return Math.random().toString(36).slice(2, 8); // 6-char random string
