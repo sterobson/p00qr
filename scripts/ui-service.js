@@ -215,13 +215,6 @@ export class UIService {
             this.signalR.sendTokenUsed(val);
         });
 
-        // this.resetEventBtn.addEventListener('click', () => {
-        //     this.confirm('Are you sure you want to reset the event? This will clear all positions for everyone sharing this event.', '⚠️', () => {
-        //         this.signalR.resetEvent();
-        //         document.querySelector('aside').classList.remove('open');
-        //     });
-        // });
-
         document.body.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
         window.addEventListener('resize', () => this.displayCurrentToken());
 

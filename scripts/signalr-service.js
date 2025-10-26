@@ -105,6 +105,15 @@ export class SignalRService {
                 // A token has been used by a device in this event. Update our next token,
                 // but only if needed.
                 this.state.hubConnection.on('tokenUsed', (messageSourceId, eventId, token) => {
+                    // Conflict resolution - if the token used matches what we are currently displaying,
+                    // then the winner is whoever has the earliest messageSourceId. It's as good a method
+                    // as anything else really. The loser(s) have their current token wiped out, so that
+                    // we don't accidentally scan the same token twice.
+                    if(token == this.state.event.currentToken && (messageSourceId < this._messageSouceId)) {
+                        this.state.event.currentToken = 0;
+                        return;
+                    }
+
                     // If the current max value is less than the token just used, update it.
                     this.state.event.nextToken = Math.max(this.state.event.nextToken, token + 1);
                     this._lastMessageReceived = Date.now();
