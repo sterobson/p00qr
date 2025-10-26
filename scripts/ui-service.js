@@ -45,6 +45,12 @@ export class UIService {
             }
         });
 
+        this.watch(() => state.connectionId, _ => {
+            this.updateEventQR();
+            this.displayCurrentToken();
+            this.displayNextToken();
+        });
+
         this.watch(() => this.signalR.getIsConnected(), (isConnected) => {
             const elements = document.getElementsByClassName('connection-state-disconnected');
 
@@ -206,7 +212,7 @@ export class UIService {
             val = Math.min(val, 9999);
             this.state.event.currentToken = val;
             console.log(`Taking next token: P${this.pad(val)}`);
-            this.signalR.sendPositionUsed(val);
+            this.signalR.sendTokenUsed(val);
         });
 
         // this.resetEventBtn.addEventListener('click', () => {

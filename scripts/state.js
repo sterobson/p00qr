@@ -5,6 +5,7 @@ export const state = {
         currentToken: 0,
         nextToken: 1
     },
+    connectionId: '',
     hubConnection: null,
 };
 
