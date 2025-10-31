@@ -22,9 +22,19 @@
             <span id="code-label"></span>
             <span id="nocode-label" class="hide">Take a token</span>
         </div>
+
+        <video id="video" width="300" height="200" style="border: 1px solid gray"></video>
+
         <div id="qr"></div>
         <div class="controls">
             <div class="input-group">
+                <button id="takeNextToken" aria-label="TakeNextToken">Give next token</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="input-group">
+                <button id="takeNextToken" aria-label="TakeNextToken">Give next token</button>
                 <button id="takeNextToken" aria-label="TakeNextToken">Give next token</button>
             </div>
         </div>
@@ -137,6 +147,7 @@
     
     <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
     <script src="./scripts/qrcode.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
     <script type="module" src="./scripts/main.js"></script>
 </body>
 </html>

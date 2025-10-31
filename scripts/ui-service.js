@@ -1,9 +1,10 @@
 import { state } from './state.js';
 
 export class UIService {
-    constructor(state, signalRService) {
+    constructor(state, signalRService, barcodeService) {
         this.state = state;
         this.signalR = signalRService;
+        this.barcodeService = barcodeService;
 
         this.positionInput = document.getElementById('position');
         this.takeNextBtn = document.getElementById('takeNextToken');
@@ -183,7 +184,10 @@ export class UIService {
 
             const qrText = `P${this.pad(this.state.event.currentToken)}`;
             this.codeLabel.textContent = qrText;
-            this.renderQR(this.qrDiv, qrText);                
+            this.renderQR(this.qrDiv, qrText);
+
+            this.barcodeService.stopReadBarcode();
+            this.barcodeService.startReadBarcode(value => this.alert(value));
         }
     }
 

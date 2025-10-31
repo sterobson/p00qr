@@ -1,6 +1,7 @@
 import { state, StateService } from './state.js';
 import { SignalRService } from './signalr-service.js';
 import { UIService } from './ui-service.js';
+import { BarcodeService } from './barcode-service.js';
 
 (async () => {
 
@@ -26,7 +27,9 @@ import { UIService } from './ui-service.js';
     const signalR = new SignalRService(state);
     await signalR.ensureConnectedToEvent();
 
-    new UIService(state, signalR);
+    const barcodeService = new BarcodeService();
+
+    new UIService(state, signalR, barcodeService);
     const stateService = new StateService(state);
 
     stateService.loadFromCookie(eventId);
