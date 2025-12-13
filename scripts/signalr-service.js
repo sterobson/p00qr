@@ -6,8 +6,27 @@ export class SignalRService {
         this._connectedEventId = null;
         this._connectLock = null;
         this._lastMessageReceived = null;
-        this._messageSouceId = Math.random().toString(36).slice(2, 8); // 6-char random string,
+        this._messageSourceId = Math.random().toString(36).slice(2, 8); // 6-char random string,
+        this._sendEventDetailsDebounced = this._debounce((eventName, nextToken) => {
+            this._performPost('SendEventDetails', {
+                eventId: this.state.event.id,
+                eventName: eventName,
+                nextToken: nextToken
+            });
+        }, 500);
         this._startPeriodicLivelinessCheck();
+    }
+
+    _debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
     }
 
     getIsConnected() {
@@ -109,8 +128,8 @@ export class SignalRService {
                     // then the winner is whoever has the latest messageSourceId. It's as good a method
                     // as anything else really. The loser(s) have their current token wiped out, so that
                     // we don't accidentally scan the same token twice.
-                    if(token == this.state.event.currentToken && messageSourceId != this._messageSouceId) {
-                        if(messageSourceId < this._messageSouceId){
+                    if(token == this.state.event.currentToken && messageSourceId != this._messageSourceId) {
+                        if(messageSourceId < this._messageSourceId){
                             console.warn(`Conflict detected! This device lost out to ${messageSourceId}`);
                             this.state.event.currentToken = 0;
                             return;
@@ -134,14 +153,19 @@ export class SignalRService {
                     console.log('Received resetEvent:', messageSourceId, eventId, this.state);
                 });
 
-                // A new device has been added to an event. Everyone sends their current state so it
-                // definitely syncs up.
+                // A new device has been added to an event. Only respond if we have useful state.
+                // Use a small random delay to reduce message storm.
                 this.state.hubConnection.on('deviceAddedToEvent', (messageSourceId, eventId) => {
-                    if(messageSourceId == this._messageSouceId) return;
+                    if(messageSourceId == this._messageSourceId) return;
 
-                    if(this.state.event.nextToken || this.state.event.name) {
-                        this.sendEventDetails(this.state.event.name, this.state.event.nextToken);
-                    }
+                    // Random delay between 100-500ms to stagger responses
+                    const delay = Math.random() * 400 + 100;
+                    setTimeout(() => {
+                        if(this.state.event.nextToken > 1 || this.state.event.name !== 'New event') {
+                            this.sendEventDetails(this.state.event.name, this.state.event.nextToken);
+                        }
+                    }, delay);
+
                     this._lastMessageReceived = Date.now();
                     console.log('Received deviceAddedToEvent:', messageSourceId, eventId, this.state);
                 });
@@ -149,11 +173,15 @@ export class SignalRService {
                 // The event's details have been updated, possibly by another device.
                 this.state.hubConnection.on('setEventDetails', (messageSourceId, eventId, eventName, nextToken) => {
                     this.state.event.name = eventName || 'Unnamed Event';
-                    
+
                     const num = Number(nextToken);
-                    if(Number.isInteger(num) && num > 0 && this.state.event.nextToken != num) {
-                        this.state.event.nextToken = num;
-                        this.state.event.currentToken = 0;
+                    if(Number.isInteger(num) && num > 0) {
+                        // Only update nextToken if the incoming value is different
+                        // This handles admin setting the token or syncing with new devices
+                        if(this.state.event.nextToken != num) {
+                            this.state.event.nextToken = num;
+                            this.state.event.currentToken = 0;
+                        }
                     }
                     this._lastMessageReceived = Date.now();
                     console.log('Received setEventDetails:', messageSourceId, eventId, eventName, nextToken, this.state);
@@ -185,29 +213,45 @@ export class SignalRService {
         console.info('SignalR connected.');
     }
 
+    async _performAnonymousGet(endpointName, queryParams) {
+        return await this._performRequest('GET', endpointName, queryParams, false)
+    }
+
+    async _performGet(endpointName, queryParams) {
+        return await this._performRequest('GET', endpointName, queryParams, true)
+    }
+
     async _performPost(endpointName, queryParams) {
+        return await this._performRequest('POST', endpointName, queryParams, true)
+    }
+
+    async _performRequest(method, endpointName, queryParams, ensureFunctionKey) {
         const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
         const url = new URL(`/api/${endpointName}`, base);
 
-        if (window.FUNCTION_KEY) 
-            url.searchParams.set('code', encodeURIComponent(window.FUNCTION_KEY));
+        await this._ensureLocalHostKey();
+        if(ensureFunctionKey) {
+            await this._ensureFunctionKey();
+        }
+
+        if (this.state.functionKey)
+            url.searchParams.set('code', encodeURIComponent(this.state.functionKey));
         
-        const body = {
+        let body = method == 'GET' ? null : {
             ...queryParams,
             connectionId: this.state?.hubConnection?.connection?.connectionId ?? null,
-            messageSourceId: this._messageSouceId
+            messageSourceId: this._messageSourceId
         };
 
-        console.log(`Calling ${url.toString()} with body:`, body);
-
         const headers = { 'Content-Type': 'application/json' };
-        if (window.FUNCTION_KEY) headers['x-functions-key'] = window.FUNCTION_KEY;
+        if (this.state.functionKey) headers['x-functions-key'] = this.state.functionKey;
+        if (this.state.localHostKey) headers['x-local-host-key'] = this.state.localHostKey;
 
         try{
             const res = await fetch(url.toString(), { 
-                method: 'POST', 
+                method: method, 
                 headers,
-                body: JSON.stringify(body) 
+                body: body ? JSON.stringify(body) : null 
             });
 
             if (!res.ok) {
@@ -247,6 +291,28 @@ export class SignalRService {
         await this._performPost('JoinEvent', {eventId: this.state.event.id});
     }
 
+    async _ensureLocalHostKey() {
+        if(this.state.localHostKey === null) {
+            await fetch('../public/config.json')
+                    .then(async res => {
+                        if(res.ok) {
+                            const obj = await res.json();
+                            this.state.localHostKey = obj.localHostKey;
+                        }
+                    });
+        }
+    }
+
+    async _ensureFunctionKey() {
+        if(this.state.functionKey === null) {
+            const res = await this._performAnonymousGet('GetFunctionKey');
+            if(res.ok) {
+                const json = await res.json();
+                this.state.functionKey = json.FunctionKey ?? json.functionKey;
+            }
+        }
+    }
+
     async resetEvent() {
         await this.ensureConnectedToEvent(this.state.event.id);
         await this._performPost('ResetEvent', {eventId: this.state.event.id});
@@ -254,11 +320,7 @@ export class SignalRService {
 
     async sendEventDetails(eventName, nextToken) {
         await this.ensureConnectedToEvent(this.state.event.id);
-        await this._performPost('SendEventDetails', {
-            eventId: this.state.event.id,
-            eventName: eventName,
-            nextToken: nextToken
-        });
+        this._sendEventDetailsDebounced(eventName, nextToken);
     }
 
     async pingEvent() {

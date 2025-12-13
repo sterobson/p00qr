@@ -29,10 +29,11 @@ import { BarcodeService } from './barcode-service.js';
 
     const barcodeService = new BarcodeService();
 
-    new UIService(state, signalR, barcodeService);
     const stateService = new StateService(state);
-
     stateService.loadFromCookie(eventId);
+    stateService.loadFromLocalStorage();
+
+    new UIService(state, signalR, barcodeService);
 
     function getNewEventId() {
         return Math.random().toString(36).slice(2, 8); // 6-char random string

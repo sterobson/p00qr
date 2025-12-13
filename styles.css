@@ -102,16 +102,12 @@ h1 {
 }
 
 #qr {
-    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100vw;
-    height: calc(100vh - 2.5rem - 1.5rem - 7rem); /* h1 + margin + controls */
-    max-width: 100vw;
-    max-height: calc(100vh - 2.5rem - 1.5rem - 7rem);
+    width: 90vw;
+    max-width: 90vw;
     border-radius: 1rem;
-    margin-bottom: 7rem; /* Space for controls */
     overflow: hidden;
 
     &.blur {
@@ -121,12 +117,15 @@ h1 {
 }
 
 .controls {
+    position: fixed;
     bottom: 0;
+    left: 0;
     width: 100vw;
-    padding: 4.5rem 0 2.5rem 0;
+    padding: 1.5rem 0 2.5rem 0;
     display: flex;
     justify-content: center;
     z-index: 10;
+    background: linear-gradient(to bottom, rgba(242, 242, 242, 0) 0%, rgba(242, 242, 242, 1) 30%);
 }
 
 button {
@@ -291,5 +290,294 @@ aside.open {
     &.hidden {
         height: 0;
         background-color: green;
+    }
+}
+
+/* Mode selection styling */
+.mode-selection {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 1rem 0;
+    width: 90vw;
+
+    &.hidden {
+        display: none;
+    }
+}
+
+.mode-button {
+    flex: 1;
+    min-width: 0;
+    height: 3.5rem;
+    font-size: calc(var(--default-font-size) * 0.7);
+    background: #ddd;
+    color: #333;
+    margin: 0;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    svg {
+        width: auto;
+        height: 60%;
+        fill: #333;
+    }
+
+    &.active {
+        background: #2e2966;
+        color: white;
+        box-shadow: 0 4px 12px rgba(46, 41, 102, 0.3);
+
+        svg {
+            fill: white;
+        }
+    }
+
+    &:active {
+        background: #2e2966;
+        color: white;
+
+        svg {
+            fill: white;
+        }
+    }
+}
+
+/* Content area */
+.content-area {
+    flex: 1;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: 7rem;
+    padding-top: 1rem;
+
+    &.hidden {
+        display: none;
+    }
+}
+
+.mode-content {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    flex: 1;
+    padding-top: 1rem;
+
+    &.hidden {
+        display: none;
+    }
+}
+
+/* Scan mode */
+#video {
+    max-width: 90vw;
+    max-height: 50vh;
+    border: 2px solid #2e2966;
+    border-radius: 1rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.confirmation {
+    margin-top: 2rem;
+    text-align: center;
+
+    &.hidden {
+        display: none;
+    }
+
+    p {
+        font-size: calc(var(--default-font-size) * 0.9);
+        margin-bottom: 1rem;
+
+        strong {
+            color: #2e2966;
+            font-size: calc(var(--default-font-size) * 1.1);
+        }
+    }
+}
+
+.save-button {
+    background: #2e2966;
+    color: white;
+    width: 70vw;
+
+    &:active {
+        background: #f41c5e;
+    }
+}
+
+/* Manual mode */
+#manual-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding: 0;
+}
+
+/* QR mode uses existing #qr styling */
+#qr-mode #qr {
+    margin-top: 0;
+}
+
+.hidden {
+    display: none;
+}
+
+/* History styling */
+.history-message {
+    text-align: center;
+    color: #999;
+    margin: 2rem 0;
+    font-size: calc(var(--default-font-size) * 0.8);
+
+    &.hidden {
+        display: none;
+    }
+}
+
+#history-list {
+    width: 90vw;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.history-item {
+    background: white;
+    border: 2px solid #ddd;
+    border-radius: 0.5rem;
+    margin: 0.5rem 0;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    &:active {
+        background: #2e2966;
+        color: white;
+        border-color: #2e2966;
+    }
+}
+
+.history-token {
+    font-family: 'Fira Mono', monospace;
+    font-size: calc(var(--default-font-size) * 1);
+    font-weight: 700;
+    color: #2e2966;
+    min-width: 5rem;
+
+    .history-item:active & {
+        color: white;
+    }
+}
+
+.history-athlete {
+    font-size: calc(var(--default-font-size) * 0.7);
+    color: #666;
+    flex: 1;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    .history-item:active & {
+        color: white;
+    }
+}
+
+/* History icon in top row */
+.history-icon {
+    position: absolute;
+    transform: translateX(40vw);
+    width: 3rem;
+    height: 3rem;
+    background: rgba(46, 41, 102, 0.1);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0.5rem;
+    margin: 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border: none;
+
+    svg {
+        width: 100%;
+        height: 100%;
+        fill: #2e2966;
+    }
+
+    &:active {
+        background: #2e2966;
+
+        svg {
+            fill: white;
+        }
+
+        .history-badge {
+            background: #f41c5e;
+            color: white;
+        }
+    }
+
+    &.hidden {
+        display: none;
+    }
+}
+
+.history-badge {
+    position: absolute;
+    top: -0.25rem;
+    right: -0.25rem;
+    background: #f41c5e;
+    color: white;
+    font-size: calc(var(--default-font-size) * 0.5);
+    font-weight: 700;
+    border-radius: 50%;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Confirmation message */
+.confirmation-message {
+    font-size: calc(var(--default-font-size) * 0.8);
+    color: white;
+    background: #2e2966;
+    padding: 1rem 1.5rem;
+    border-radius: 0.5rem;
+    margin: 1rem auto;
+    width: 80vw;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    animation: slideIn 0.3s ease;
+
+    &.hidden {
+        display: none;
+    }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-1rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
