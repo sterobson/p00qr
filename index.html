@@ -22,23 +22,21 @@
             <span id="code-label"></span>
             <span id="nocode-label" class="hide">Take a token</span>
             <button id="history-icon" class="history-icon hidden" opens="history-menu" title="View history">
-                <!--!Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.-->
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-                    <path d="M256 512C114.6 512 0 397.4 0 256C0 114.6 114.6 0 256 0C397.4 0 512 114.6 512 256C512 397.4 397.4 512 256 512zM232 120C232 106.7 242.7 96 256 96C269.3 96 280 106.7 280 120V256C280 269.3 269.3 280 256 280C242.7 280 232 269.3 232 256V120zM256 344C242.7 344 232 354.7 232 368C232 381.3 242.7 392 256 392H368C381.3 392 392 381.3 392 368C392 354.7 381.3 344 368 344H256z"/>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="6"/>
+                    <line x1="50" y1="50" x2="50" y2="25" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+                    <line x1="50" y1="50" x2="70" y2="50" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
                 </svg>
                 <span id="history-badge" class="history-badge">0</span>
             </button>
         </div>
-
-        <!-- Confirmation message -->
-        <div id="confirmation-message" class="confirmation-message hidden"></div>
 
         <!-- Mode selection buttons -->
         <div id="mode-selection" class="mode-selection hidden">
             <button id="mode-scan" class="mode-button" data-mode="scan" title="Scan barcode">
                 <!--!Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.-->
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-                    <path d="M24 32C10.7 32 0 42.7 0 56L0 456c0 13.3 10.7 24 24 24l16 0c13.3 0 24-10.7 24-24L64 56c0-13.3-10.7-24-24-24L24 32zm88 0c-8.8 0-16 7.2-16 16l0 416c0 8.8 7.2 16 16 16s16-7.2 16-16l0-416c0-8.8-7.2-16-16-16zm72 0c-13.3 0-24 10.7-24 24l0 400c0 13.3 10.7 24 24 24s24-10.7 24-24l0-400c0-13.3-10.7-24-24-24zm96 0c-13.3 0-24 10.7-24 24l0 400c0 13.3 10.7 24 24 24s24-10.7 24-24l0-400c0-13.3-10.7-24-24-24zM448 56l0 400c0 13.3 10.7 24 24 24s24-10.7 24-24l0-400c0-13.3-10.7-24-24-24s-24 10.7-24 24zM352 32c-8.8 0-16 7.2-16 16l0 416c0 8.8 7.2 16 16 16s16-7.2 16-16l0-416c0-8.8-7.2-16-16-16z"/>
+                    <path d="M149.1 64.8L138.7 96H64C28.7 96 0 124.7 0 160V416c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V160c0-35.3-28.7-64-64-64H373.3L362.9 64.8C356.4 45.2 338.1 32 317.4 32H194.6c-20.7 0-39 13.2-45.5 32.8zM256 192a96 96 0 1 1 0 192 96 96 0 1 1 0-192z"/>
                 </svg>
             </button>
             <button id="mode-manual" class="mode-button" data-mode="manual" title="Manual entry">
@@ -50,9 +48,17 @@
             <button id="mode-qr" class="mode-button" data-mode="qr" title="Show QR code">
                 <!--!Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.-->
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
-                    <path d="M0 80C0 53.5 21.5 32 48 32l96 0c26.5 0 48 21.5 48 48l0 96c0 26.5-21.5 48-48 48l-96 0c-26.5 0-48-21.5-48-48L0 80zM64 96l0 64 64 0 0-64L64 96zM0 336c0-26.5 21.5-48 48-48l96 0c26.5 0 48 21.5 48 48l0 96c0 26.5-21.5 48-48 48l-96 0c-26.5 0-48-21.5-48-48l0-96zm64 16l0 64 64 0 0-64-64 0zM304 32l96 0c26.5 0 48 21.5 48 48l0 96c0 26.5-21.5 48-48 48l-96 0c-26.5 0-48-21.5-48-48l0-96c0-26.5 21.5-48 48-48zm80 64l-64 0 0 64 64 0 0-64zM256 304c0-8.8 7.2-16 16-16l64 0c8.8 0 16 7.2 16 16s7.2 16 16 16l32 0c8.8 0 16-7.2 16-16s7.2-16 16-16s16 7.2 16 16l0 96c0 8.8-7.2 16-16 16l-64 0 0 64c0 8.8-7.2 16-16 16l-64 0c-8.8 0-16-7.2-16-16l0-160zM368 480a16 16 0 1 1 0-32 16 16 0 1 1 0 32zm64 0a16 16 0 1 1 0-32 16 16 0 1 1 0 32z"/>
+                    <path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512l388.6 0c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304l-91.4 0z"/>
                 </svg>
             </button>
+        </div>
+
+        <!-- Edit indicator -->
+        <div id="edit-indicator" class="edit-indicator hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                <path d="M421.7 220.3L188.5 453.4L154.6 419.5L158.1 416H112C103.2 416 96 408.8 96 400V353.9L92.51 357.4C87.78 362.2 84.31 368 82.42 374.4L59.44 452.6C56.46 463.1 61.86 474.5 72.33 477.5C73.94 477.1 75.58 478.2 77.2 478.2C84.66 478.2 91.76 474.3 95.62 467.4L137.2 390.5L84.84 338.2C70.28 323.6 70.28 299.9 84.84 285.3L314.1 56.08C328.7 41.51 352.4 41.51 366.1 56.08L456.9 146.9C471.5 161.5 471.5 185.2 456.9 199.7L421.7 220.3zM492.7 58.75C519.8 85.88 519.8 129.1 492.7 156.1L411.7 237.1L274.9 100.3L355.9 19.27C382.1-7.85 426.1-7.85 453.3 19.27L492.7 58.75z"/>
+            </svg>
+            <span id="edit-indicator-text">Editing P0000</span>
         </div>
 
         <!-- Content area for different modes -->
@@ -117,9 +123,10 @@
             Event settings
         </button>
         <button id="history-open" opens="history-menu">
-            <!--!Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.-->
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
-                <path d="M75.6 384C79.5 448.7 112.7 506.2 162.6 545.5L144.6 563.5C135.5 572.6 138.6 587.8 150.1 592.5L248.3 628.2C256.1 631.1 264.8 627.5 268.9 619.9L304.6 521.7C309.3 510.2 299.8 497.8 287.4 498.6L255.5 500.2C213.7 469.2 185.9 421.1 183.1 368C180.1 310.5 204.9 256.3 248 220.8C291.2 185.2 348.1 172.1 403.8 186.1C459.4 200.2 504.6 240.2 525.3 293.1C546 346 538.4 405.2 504.6 451.1C500.9 456.4 502.2 463.8 507.5 467.5C512.8 471.2 520.2 469.9 523.9 464.6C561.2 413.8 569.6 348.5 546.6 290.3C523.6 232.2 473.5 188.1 412.6 172.5C351.6 157 287.7 171.4 240 210.3C192.2 249.2 165 307.7 168.4 370.1C170 396.6 177.8 421.8 190.3 444.4L172.3 462.4C133 423 99.8 365.5 95.9 300.8C91.3 226.4 120.5 155.2 175.3 107.2L157.3 89.2C148.2 80.1 151.3 64.9 162.8 60.2L261 24.5C268.8 21.6 277.5 25.2 281.6 32.8L317.3 131C322 142.5 312.5 154.9 300.1 154.1L268.2 152.5C209.7 204.3 177.7 280.6 182.8 360.1L75.6 384z"/>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="6"/>
+                <line x1="50" y1="50" x2="50" y2="25" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+                <line x1="50" y1="50" x2="70" y2="50" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
             </svg>
             History
         </button>

@@ -18,7 +18,8 @@ export class UIService {
         this.historyEmpty = document.getElementById('history-empty');
         this.historyIcon = document.getElementById('history-icon');
         this.historyBadge = document.getElementById('history-badge');
-        this.confirmationMessage = document.getElementById('confirmation-message');
+        this.editIndicator = document.getElementById('edit-indicator');
+        this.editIndicatorText = document.getElementById('edit-indicator-text');
 
         // Mode elements
         this.modeSelection = document.getElementById('mode-selection');
@@ -117,7 +118,8 @@ export class UIService {
                 this.positionInput.value = '';
             }
         });
-        this.watch(() => this.state.assignments.length, () => {
+        // Watch for any changes to assignments (additions, deletions, or edits)
+        this.watch(() => JSON.stringify(this.state.assignments), () => {
             this.renderHistory();
             this.renderHistorySummary();
         });
@@ -185,11 +187,12 @@ export class UIService {
             return;
         }
 
-        // If in QR mode with a current token, save empty assignment and advance to next token
+        // If in QR mode with a current token, advance to next token
         if (this.state.event.currentToken > 0 && this.state.currentMode === 'qr') {
-            // Save assignment with no athlete data (can be filled in later from history)
-            this.saveAssignment('', '');
             this.returnToGiveTokenState();
+            // Immediately take the next token
+            setTimeout(() => this.handleTakeNextToken(), 0);
+            return;
         }
 
         const val = this.state.event.nextToken > 0 ? this.state.event.nextToken : 1;
@@ -204,6 +207,11 @@ export class UIService {
         const mode = this.state.preferredMode || 'scan';
         this.state.currentMode = mode;
         this.switchMode(mode);
+
+        // If QR mode, save the assignment immediately (with empty athlete data)
+        if (mode === 'qr') {
+            this.saveAssignment('', '');
+        }
     }
 
     switchMode(mode, prefillData = null) {
@@ -354,7 +362,9 @@ export class UIService {
             athleteBarcode: athleteBarcode,
             athleteName: athleteName || '',
             timestamp: Date.now(),
-            entryMethod: this.state.currentMode // Remember which mode was used
+            entryMethod: this.state.currentMode, // Remember which mode was used
+            connectionId: this.state.connectionId,
+            isLocal: true
         };
 
         // Remove any existing assignment for this token
@@ -365,30 +375,15 @@ export class UIService {
 
         console.log('Saved assignment:', assignment);
 
-        // Show confirmation message
-        this.showConfirmation(assignment);
-    }
-
-    showConfirmation(assignment) {
-        const tokenLabel = `P${this.pad(assignment.token)}`;
-        let message;
-
-        if (assignment.athleteBarcode) {
-            message = `${tokenLabel} assigned to ${assignment.athleteBarcode}`;
-            if (assignment.athleteName) {
-                message += ` (${assignment.athleteName})`;
-            }
-        } else {
-            message = `${tokenLabel} recorded`;
-        }
-
-        this.confirmationMessage.textContent = message;
-        this.confirmationMessage.classList.remove('hidden');
-
-        // Hide after 3 seconds
+        // Send the 5 most recent local assignments to all other devices
+        // Use setTimeout to ensure state update has completed
         setTimeout(() => {
-            this.confirmationMessage.classList.add('hidden');
-        }, 3000);
+            const recentAssignments = this.signalR.getRecentAssignments(5);
+            console.log('Sending recent assignments:', recentAssignments);
+            if (recentAssignments.length > 0) {
+                this.signalR.sendTokenAssignments(recentAssignments);
+            }
+        }, 100);
     }
 
     returnToGiveTokenState() {
@@ -400,7 +395,7 @@ export class UIService {
     }
 
     renderHistory() {
-        // Sort assignments by token number (descending)
+        // Always sort assignments by token number (descending - highest first)
         const sorted = [...this.state.assignments].sort((a, b) => b.token - a.token);
 
         if (sorted.length === 0) {
@@ -414,12 +409,19 @@ export class UIService {
             const tokenLabel = `P${this.pad(assignment.token)}`;
             const athleteInfo = assignment.athleteName
                 ? `${assignment.athleteBarcode} (${assignment.athleteName})`
-                : assignment.athleteBarcode || '[Empty - tap to add]';
+                : assignment.athleteBarcode || '[Empty]';
+
+            const remoteClass = assignment.isLocal ? '' : 'remote';
 
             return `
-                <div class="history-item" data-token="${assignment.token}">
-                    <div class="history-token">${tokenLabel}</div>
-                    <div class="history-athlete">${athleteInfo}</div>
+                <div class="history-item ${remoteClass}" data-token="${assignment.token}">
+                    <div class="history-info">
+                        <div class="history-token">${tokenLabel}</div>
+                        <div class="history-athlete">${athleteInfo}</div>
+                    </div>
+                    <svg class="history-edit-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path d="M421.7 220.3L188.5 453.4L154.6 419.5L158.1 416H112C103.2 416 96 408.8 96 400V353.9L92.51 357.4C87.78 362.2 84.31 368 82.42 374.4L59.44 452.6C56.46 463.1 61.86 474.5 72.33 477.5C73.94 477.1 75.58 478.2 77.2 478.2C84.66 478.2 91.76 474.3 95.62 467.4L137.2 390.5L84.84 338.2C70.28 323.6 70.28 299.9 84.84 285.3L314.1 56.08C328.7 41.51 352.4 41.51 366.1 56.08L456.9 146.9C471.5 161.5 471.5 185.2 456.9 199.7L421.7 220.3zM492.7 58.75C519.8 85.88 519.8 129.1 492.7 156.1L411.7 237.1L274.9 100.3L355.9 19.27C382.1-7.85 426.1-7.85 453.3 19.27L492.7 58.75z"/>
+                    </svg>
                 </div>
             `;
         }).join('');
@@ -487,12 +489,15 @@ export class UIService {
             this.codeLabel.classList.remove('hide');
             this.nocodeLabel.classList.add('hide');
 
-            // If editing existing, always show "Cancel"
+            // If editing existing, show edit indicator and "Cancel" button
             if (this.state.isEditingExisting) {
+                this.editIndicator.classList.remove('hidden');
+                this.editIndicatorText.textContent = `Editing P${this.pad(this.state.event.currentToken)}`;
                 this.takeNextBtn.textContent = 'Cancel';
             }
             // In QR mode (new token), show "Give token P####" for next token
             else if (this.state.currentMode === 'qr') {
+                this.editIndicator.classList.add('hidden');
                 const nextToken = this.state.event.nextToken;
                 if (nextToken === 0) {
                     this.takeNextBtn.textContent = 'Give next token';
@@ -502,10 +507,12 @@ export class UIService {
             }
             // In other modes (new token), show "Cancel"
             else {
+                this.editIndicator.classList.add('hidden');
                 this.takeNextBtn.textContent = 'Cancel';
             }
         } else {
             // Show "Give token" button
+            this.editIndicator.classList.add('hidden');
             this.modeSelection.classList.add('hidden');
             this.contentArea.classList.add('hidden');
             this.scanModeDiv.classList.add('hidden');
@@ -579,6 +586,9 @@ export class UIService {
                     currentToken: 0,
                     nextToken: nextPosition || 1
                 };
+
+                // Clear all assignments for the new event
+                state.assignments = [];
 
                 // Update the URL
                 const url = new URL(window.location);

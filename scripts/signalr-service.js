@@ -15,6 +15,7 @@ export class SignalRService {
             });
         }, 500);
         this._startPeriodicLivelinessCheck();
+        this._startPeriodicSync();
     }
 
     _debounce(func, wait) {
@@ -84,6 +85,12 @@ export class SignalRService {
                 await this._joinEvent();
                 this._connectedEventId = this.state.event.id;
                 this.state.connectionId = this.state.hubConnection.connectionId;
+
+                // Request full history from all other devices
+                // Add a small delay to ensure we're ready to receive responses
+                setTimeout(() => {
+                    this.requestFullHistory();
+                }, 1000);
             }
         } finally {
             resolveLock();
@@ -191,6 +198,78 @@ export class SignalRService {
                 this.state.hubConnection.on('pingEvent', (messageSourceId, eventId) => {
                     this._lastMessageReceived = Date.now();
                     console.log('Received pingEvent:', messageSourceId, eventId, this.state);
+                });
+
+                // Token assignments have been updated. Merge with local state using conflict resolution.
+                this.state.hubConnection.on('tokenAssignments', (messageSourceId, eventId, assignments) => {
+                    if(messageSourceId == this._messageSourceId) {
+                        // Ignore our own messages
+                        this._lastMessageReceived = Date.now();
+                        return;
+                    }
+
+                    console.log('Received tokenAssignments:', messageSourceId, eventId, assignments);
+
+                    this._mergeAssignments(assignments);
+
+                    this._lastMessageReceived = Date.now();
+                });
+
+                // A new device is requesting full history from all devices
+                this.state.hubConnection.on('requestFullHistory', (messageSourceId, eventId) => {
+                    if(messageSourceId == this._messageSourceId) {
+                        // Ignore our own request
+                        this._lastMessageReceived = Date.now();
+                        return;
+                    }
+
+                    console.log('Received requestFullHistory from:', messageSourceId);
+
+                    // Send ALL assignments we know about (not just local ones)
+                    // This ensures the new device gets the complete history from all sources
+                    if (this.state.assignments.length > 0) {
+                        // Add a small random delay to avoid message storm
+                        const delay = Math.random() * 500 + 100;
+                        setTimeout(() => {
+                            // Mark all assignments as coming from their original source
+                            const allAssignments = this.state.assignments.map(a => ({
+                                ...a,
+                                // Preserve the original isLocal flag in the data we send
+                            }));
+                            this.sendTokenAssignments(allAssignments);
+                        }, delay);
+                    }
+
+                    this._lastMessageReceived = Date.now();
+                });
+
+                // Sync digest - lightweight sync check
+                this.state.hubConnection.on('syncDigest', (messageSourceId, eventId, count, tokens) => {
+                    if(messageSourceId == this._messageSourceId) {
+                        this._lastMessageReceived = Date.now();
+                        return;
+                    }
+
+                    console.log('Received syncDigest:', { count, tokens: tokens.length });
+
+                    // Check if we need to request full history
+                    const myTokens = this.state.assignments.map(a => a.token).sort((a, b) => a - b);
+                    const theirTokens = [...tokens].sort((a, b) => a - b);
+
+                    // Simple check: different count or missing tokens
+                    const needsSync = count !== this.state.assignments.length ||
+                        theirTokens.some(token => !myTokens.includes(token));
+
+                    if (needsSync) {
+                        console.log('Out of sync detected! My tokens:', myTokens.length, 'Their tokens:', theirTokens.length);
+                        console.log('Requesting full history...');
+                        // Request full history to get the missing data
+                        setTimeout(() => {
+                            this.requestFullHistory();
+                        }, Math.random() * 1000 + 500);
+                    }
+
+                    this._lastMessageReceived = Date.now();
                 });
 
                 this._connectedEventId = this.state.event.id;
@@ -326,5 +405,105 @@ export class SignalRService {
     async pingEvent() {
         await this.ensureConnectedToEvent(this.state.event.id);
         await this._performPost('PingEvent', {eventId: this.state.event.id});
-    }    
+    }
+
+    _inferEntryMethod(athleteId) {
+        // If no athlete ID, it was probably QR mode
+        if (!athleteId) return 'qr';
+        // Otherwise default to manual (includes scan results)
+        return 'manual';
+    }
+
+    _mergeAssignments(assignments) {
+        // Merge incoming assignments with local state
+        assignments.forEach(incoming => {
+            const position = parseInt(incoming.Position.replace('P', ''));
+            const existing = this.state.assignments.find(a => a.token === position);
+
+            if (!existing) {
+                // New assignment, add it
+                this.state.assignments.push({
+                    token: position,
+                    athleteBarcode: incoming.AthleteId || '',
+                    athleteName: incoming.AthleteName || '',
+                    timestamp: incoming.Timestamp,
+                    entryMethod: this._inferEntryMethod(incoming.AthleteId),
+                    connectionId: incoming.ConnectionId,
+                    isLocal: false
+                });
+            } else {
+                // Existing assignment - apply conflict resolution
+                // Most recent timestamp wins, with connectionId as tiebreaker
+                const shouldUpdate = incoming.Timestamp > existing.timestamp ||
+                    (incoming.Timestamp === existing.timestamp && incoming.ConnectionId > existing.connectionId);
+
+                if (shouldUpdate) {
+                    existing.athleteBarcode = incoming.AthleteId || '';
+                    existing.athleteName = incoming.AthleteName || '';
+                    existing.timestamp = incoming.Timestamp;
+                    existing.entryMethod = this._inferEntryMethod(incoming.AthleteId);
+                    existing.connectionId = incoming.ConnectionId;
+                    existing.isLocal = false;
+
+                    console.log(`Updated token ${position} with newer data (timestamp: ${incoming.Timestamp}, connectionId: ${incoming.ConnectionId})`);
+                }
+            }
+        });
+
+        // Trigger a save to localStorage
+        this.state.assignments = [...this.state.assignments];
+    }
+
+    async sendTokenAssignments(assignments) {
+        await this.ensureConnectedToEvent(this.state.event.id);
+
+        // Convert assignments to the backend format
+        const payload = assignments.map(a => ({
+            Position: `P${String(a.token).padStart(4, '0')}`,
+            AthleteId: a.athleteBarcode || '',
+            AthleteName: a.athleteName || '',
+            ConnectionId: a.connectionId || this.state.connectionId,
+            Timestamp: a.timestamp
+        }));
+
+        await this._performPost('SendTokenAssignments', {
+            eventId: this.state.event.id,
+            assignments: payload
+        });
+    }
+
+    getRecentAssignments(count = 5) {
+        // Get the most recent local assignments
+        return this.state.assignments
+            .filter(a => a.isLocal)
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, count);
+    }
+
+    async requestFullHistory() {
+        await this.ensureConnectedToEvent(this.state.event.id);
+        await this._performPost('RequestFullHistory', {eventId: this.state.event.id});
+        console.log('Requested full history from all devices');
+    }
+
+    async sendSyncDigest() {
+        await this.ensureConnectedToEvent(this.state.event.id);
+
+        const tokens = this.state.assignments.map(a => a.token);
+        await this._performPost('SendSyncDigest', {
+            eventId: this.state.event.id,
+            count: this.state.assignments.length,
+            tokens: tokens
+        });
+    }
+
+    _startPeriodicSync() {
+        // Send sync digest every 30 seconds to ensure devices stay in sync
+        const syncInterval = 30000; // 30 seconds
+        setInterval(() => {
+            if (this.getIsConnected() && this.state.assignments.length > 0) {
+                this.sendSyncDigest();
+            }
+        }, syncInterval);
+    }
 }

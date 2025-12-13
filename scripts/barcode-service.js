@@ -2,7 +2,7 @@ export class BarcodeService {
 
     constructor() {
         const hints = new Map();
-        const formats = [ZXing.BarcodeFormat.CODE_128];
+        const formats = [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.QR_CODE];
         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
         this._codeReader = new ZXing.BrowserMultiFormatReader(hints);
         this._selectedDeviceId = null;

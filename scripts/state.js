@@ -9,7 +9,7 @@ export const state = {
     hubConnection: null,
     functionKey: null,
     localHostKey: null,
-    assignments: [], // {token, athleteBarcode, athleteName, timestamp}
+    assignments: [], // {token, athleteBarcode, athleteName, timestamp, entryMethod, connectionId, isLocal}
     preferredMode: null, // 'scan' | 'manual' | 'qr'
     currentMode: null,
     isEditingExisting: false // true when editing from history, false when taking new token

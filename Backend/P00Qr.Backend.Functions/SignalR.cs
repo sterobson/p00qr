@@ -15,6 +15,20 @@ public class EventPayload
     public string? MessageSourceId { get; set; }
 }
 
+public class TokenAssignment
+{
+    public string Position { get; set; } = string.Empty;
+    public string AthleteId { get; set; } = string.Empty;
+    public string AthleteName { get; set; } = string.Empty;
+    public string ConnectionId { get; set; } = string.Empty;
+    public long Timestamp { get; set; }
+}
+
+public class TokenAssignmentsPayload : EventPayload
+{
+    public List<TokenAssignment> Assignments { get; set; } = new List<TokenAssignment>();
+}
+
 public class TokenUsedPayload : EventPayload
 {
     public int Token { get; set; } = 0;
@@ -131,6 +145,51 @@ public class SignalR
         return new SignalRMessageAction("tokenUsed")
         {
             Arguments = [payload.MessageSourceId ?? "", payload.EventId, payload.Token],
+            GroupName = payload.EventId
+        };
+    }
+
+    [Function(nameof(SendTokenAssignments))]
+    [SignalROutput(HubName = P00QrHubName)]
+    public static async Task<SignalRMessageAction> SendTokenAssignments(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
+        [FromBody] TokenAssignmentsPayload payload)
+    {
+        return new SignalRMessageAction("tokenAssignments")
+        {
+            Arguments = [payload.MessageSourceId ?? "", payload.EventId, payload.Assignments],
+            GroupName = payload.EventId
+        };
+    }
+
+    [Function(nameof(RequestFullHistory))]
+    [SignalROutput(HubName = P00QrHubName)]
+    public static async Task<SignalRMessageAction> RequestFullHistory(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
+        [FromBody] EventPayload payload)
+    {
+        return new SignalRMessageAction("requestFullHistory")
+        {
+            Arguments = [payload.MessageSourceId ?? "", payload.EventId],
+            GroupName = payload.EventId
+        };
+    }
+
+    public class SyncDigestPayload : EventPayload
+    {
+        public int Count { get; set; }
+        public List<int> Tokens { get; set; } = new List<int>();
+    }
+
+    [Function(nameof(SendSyncDigest))]
+    [SignalROutput(HubName = P00QrHubName)]
+    public static async Task<SignalRMessageAction> SendSyncDigest(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
+        [FromBody] SyncDigestPayload payload)
+    {
+        return new SignalRMessageAction("syncDigest")
+        {
+            Arguments = [payload.MessageSourceId ?? "", payload.EventId, payload.Count, payload.Tokens],
             GroupName = payload.EventId
         };
     }
