@@ -42,26 +42,10 @@ function Deploy-Frontend {
         }
     }
 
-    # Create a backup of index.html
-    Write-Host "Creating backup of index.html..." -ForegroundColor Gray
-    Copy-Item "index.html" "index.html.backup" -Force
-
     try {
-        # Read the file
-        $content = Get-Content "index.html" -Raw
-
-        # Swap the configuration (comment local, uncomment production)
-        $content = $content -replace "window\.FUNCTIONS_URL = 'http://localhost:7172'", "//window.FUNCTIONS_URL = 'http://localhost:7172'"
-        $content = $content -replace "window\.FUNCTION_KEY = 'Loyl89meoaRFWgIOfjTjJdJg3ZN9WfGguoghClu2Kp2HAzFuESIjXw==';", "//window.FUNCTION_KEY = 'Loyl89meoaRFWgIOfjTjJdJg3ZN9WfGguoghClu2Kp2HAzFuESIjXw==';"
-        $content = $content -replace "//window\.FUNCTIONS_URL = 'https://sterobson-personal\.azurewebsites\.net';", "window.FUNCTIONS_URL = 'https://sterobson-personal.azurewebsites.net';"
-        $content = $content -replace "//window\.FUNCTION_KEY = 'wK5Hom6IL-8jrjczudS6pdUIBX9expUMQKf5iui0af_6AzFukVzLeg=='", "window.FUNCTION_KEY = 'wK5Hom6IL-8jrjczudS6pdUIBX9expUMQKf5iui0af_6AzFukVzLeg=='"
-
-        # Write the modified content
-        Write-Host "Updating index.html with production config..." -ForegroundColor Gray
-        Set-Content "index.html" $content -NoNewline
-
         # Deploy to GitHub Pages using gh-pages branch
         Write-Host "Deploying to GitHub Pages..." -ForegroundColor Gray
+        Write-Host "Note: Auto-detection will use production config when deployed" -ForegroundColor Gray
 
         # Add all files to git
         git add .
@@ -86,18 +70,13 @@ function Deploy-Frontend {
             Write-Host "Frontend deployment failed!" -ForegroundColor Red
             $result = $false
         }
+
+        # Reset the commit
+        git reset HEAD~1 2>&1 | Out-Null
     }
     catch {
         Write-Host "Error during frontend deployment: $_" -ForegroundColor Red
         $result = $false
-    }
-    finally {
-        # Restore the backup
-        Write-Host "Restoring index.html with local config..." -ForegroundColor Gray
-        Move-Item "index.html.backup" "index.html" -Force
-
-        # Reset the commit if we created one
-        git reset HEAD~1 2>&1 | Out-Null
     }
 
     return $result

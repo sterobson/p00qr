@@ -372,14 +372,42 @@ export class SignalRService {
 
     async _ensureLocalHostKey() {
         if(this.state.localHostKey === null) {
-            await fetch('../public/config.json')
-                    .then(async res => {
-                        if(res.ok) {
-                            const obj = await res.json();
-                            this.state.localHostKey = obj.localHostKey;
-                        }
-                    });
+            // Only try to load local host key when running on localhost
+            const isLocal = this._isLocalHost(window.location.hostname);
+            if (!isLocal) {
+                // Not running locally, no need for local host key
+                this.state.localHostKey = '';
+                return;
+            }
+
+            try {
+                const res = await fetch('../public/config.json');
+                if(res.ok) {
+                    const obj = await res.json();
+                    this.state.localHostKey = obj.localHostKey;
+                } else {
+                    this.state.localHostKey = '';
+                }
+            } catch (err) {
+                // Config file not found - this is fine for production
+                this.state.localHostKey = '';
+            }
         }
+    }
+
+    _isLocalHost(hostname) {
+        if (!hostname) return false;
+
+        hostname = hostname.toLowerCase();
+
+        const localPatterns = [
+            'localhost',
+            '127.',
+            '192.168.',
+            '::1'
+        ];
+
+        return localPatterns.some(pattern => hostname.startsWith(pattern));
     }
 
     async _ensureFunctionKey() {
