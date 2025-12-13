@@ -7,7 +7,7 @@ export const state = {
     },
     connectionId: '',
     hubConnection: null,
-    functionKey: null,
+    functionKey: window.FUNCTION_KEY || null,  // Initialize from auto-detection
     localHostKey: null,
     assignments: [], // {token, athleteBarcode, athleteName, timestamp, entryMethod, connectionId, isLocal}
     preferredMode: null, // 'scan' | 'manual' | 'qr'
