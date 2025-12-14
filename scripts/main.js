@@ -3,8 +3,7 @@ import { SignalRService } from './signalr-service.js';
 import { UIService } from './ui-service.js';
 import { BarcodeService } from './barcode-service.js';
 
-// Wait for environment selection before initializing
-window.addEventListener('env-selected', async () => {
+async function initializeApp() {
     console.log('Environment selected, initializing app...');
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -40,4 +39,12 @@ window.addEventListener('env-selected', async () => {
     function getNewEventId() {
         return Math.random().toString(36).slice(2, 8); // 6-char random string
     }
-});
+}
+
+// If environment is already configured (production), initialize immediately
+// Otherwise, wait for environment selection event (localhost)
+if (window.FUNCTIONS_URL && window.FUNCTION_KEY) {
+    initializeApp();
+} else {
+    window.addEventListener('env-selected', initializeApp);
+}

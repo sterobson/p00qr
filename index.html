@@ -277,11 +277,7 @@
                 window.FUNCTIONS_URL = 'https://sterobson-personal.azurewebsites.net';
                 window.FUNCTION_KEY = 'wK5Hom6IL-8jrjczudS6pdUIBX9expUMQKf5iui0af_6AzFukVzLeg==';
                 console.log('Running in PRODUCTION mode');
-
-                // Trigger app initialization immediately
-                setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('env-selected'));
-                }, 0);
+                // main.js will detect these are set and initialize automatically
             }
         })();
     </script>
