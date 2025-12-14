@@ -5,6 +5,7 @@ export class UIService {
         this.state = state;
         this.signalR = signalRService;
         this.barcodeService = barcodeService;
+        this.isQrTransitioning = false;
 
         // Get DOM elements
         this.positionInput = document.getElementById('position');
@@ -51,6 +52,13 @@ export class UIService {
         this.setupWatchers();
         this.updateEventQR();
         this.updateUI();
+
+        // If there's a current token but no mode selected, set default mode
+        if (this.state.event.currentToken > 0 && !this.state.currentMode) {
+            const defaultMode = this.state.preferredMode || 'qr';
+            this.state.currentMode = defaultMode;
+            this.switchMode(defaultMode);
+        }
 
         document.getElementById('event-name-input').value = state.event.name;
     }
@@ -485,7 +493,11 @@ export class UIService {
             // Show mode selection and content area
             this.modeSelection.classList.remove('hidden');
             this.contentArea.classList.remove('hidden');
-            this.codeLabel.textContent = `P${this.pad(this.state.event.currentToken)}`;
+
+            // Only update label if not transitioning
+            if (!this.isQrTransitioning) {
+                this.codeLabel.textContent = `P${this.pad(this.state.event.currentToken)}`;
+            }
             this.codeLabel.classList.remove('hide');
             this.nocodeLabel.classList.add('hide');
 
@@ -534,7 +546,35 @@ export class UIService {
 
     renderPositionQR() {
         const qrText = `P${this.pad(this.state.event.currentToken)}`;
-        this.renderQR(this.qrDiv, qrText);
+
+        // If QR already exists, animate the transition
+        if (this.qrDiv.children.length > 0) {
+            // Set transitioning flag and show loading spinner in header
+            this.isQrTransitioning = true;
+            this.codeLabel.innerHTML = '<span class="spinner">⏳</span>';
+
+            // Slide out to the right (0.5s)
+            this.qrDiv.classList.add('sliding-out');
+
+            // After sliding out, change content and slide in from left
+            setTimeout(() => {
+                this.qrDiv.classList.remove('sliding-out');
+                this.qrDiv.classList.add('sliding-in');
+
+                // Render new QR code
+                this.renderQR(this.qrDiv, qrText);
+
+                // After slide-in completes, update header and clear flag
+                setTimeout(() => {
+                    this.qrDiv.classList.remove('sliding-in');
+                    this.isQrTransitioning = false;
+                    this.codeLabel.textContent = `P${this.pad(this.state.event.currentToken)}`;
+                }, 500);
+            }, 500);
+        } else {
+            // First render, no animation
+            this.renderQR(this.qrDiv, qrText);
+        }
     }
 
     updateEventQR() {
@@ -547,7 +587,7 @@ export class UIService {
         const rect = el.getBoundingClientRect();
         // Use viewport width as fallback if element not sized yet
         const size = rect.width > 0 ? rect.width : window.innerWidth * 0.8;
-        return Math.floor(Math.min(size, 400) * 0.9); // Max 400px, use 90% of available
+        return Math.floor(Math.min(size, 400) * 0.675); // Max 400px, use 67.5% of available (75% of original size)
     }
 
     renderQR(el, qrText) {

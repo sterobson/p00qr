@@ -3,7 +3,9 @@ import { SignalRService } from './signalr-service.js';
 import { UIService } from './ui-service.js';
 import { BarcodeService } from './barcode-service.js';
 
-(async () => {
+// Wait for environment selection before initializing
+window.addEventListener('env-selected', async () => {
+    console.log('Environment selected, initializing app...');
 
     const urlParams = new URLSearchParams(window.location.search);
     let eventId = urlParams.get('eventId');
@@ -38,4 +40,4 @@ import { BarcodeService } from './barcode-service.js';
     function getNewEventId() {
         return Math.random().toString(36).slice(2, 8); // 6-char random string
     }
-})();
+});

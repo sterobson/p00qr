@@ -66,6 +66,7 @@
             <!-- Scan mode -->
             <div id="scan-mode" class="mode-content hidden">
                 <video id="video" width="300" height="200"></video>
+                <p class="scan-instructions">Scan the athlete's barcode, this works best if they have a QR code.</p>
                 <div id="scan-confirmation" class="confirmation hidden">
                     <p>Athlete: <strong id="scanned-barcode"></strong></p>
                     <button id="save-scan" class="save-button">Save</button>
@@ -88,6 +89,7 @@
             <!-- QR display mode -->
             <div id="qr-mode" class="mode-content hidden">
                 <div id="qr"></div>
+                <p class="qr-instructions">Please take the athlete's barcode to be scanned, then scan this position token.</p>
             </div>
         </div>
 
@@ -195,7 +197,7 @@
         <div class="modal">
             <div class="modal-text">
                 <div id="confirm-icon" class="modal-icon">⚠️</div>
-                <p id="confirm-text">Are you sure you want to reset the event? This will affect all linked devices.</p>
+                <p id="confirm-text">Are you sure?</p>
             </div>
             <div class="modal-buttons">
                 <button id="confirm-button-1">Yes</button>
@@ -208,16 +210,30 @@
         <div class="modal">
             <div class="modal-text">
                 <div id="alert-icon" class="modal-icon">⚠️</div>
-                <p id="alert-text">Are you sure you want to reset the event? This will affect all linked devices.</p>
+                <p id="alert-text">Alert message</p>
             </div>
             <div class="modal-buttons">
-                <button id="alert-button">Ok</button>
+                <button id="alert-button">OK</button>
             </div>
         </div>
     </div>
 
     <div class="connection-state-disconnected hidden">
         Not connected
+    </div>
+
+    <!-- Environment selection modal (only shown on localhost) -->
+    <div id="env-select-modal" class="modal-backdrop hidden">
+        <div class="modal">
+            <div class="modal-text">
+                <div class="modal-icon">🔧</div>
+                <h2>Development Mode</h2>
+            </div>
+            <div class="modal-buttons env-buttons">
+                <button id="env-local-btn" class="env-button">💻 Local</button>
+                <button id="env-remote-btn" class="env-button">☁️ Remote</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -230,15 +246,42 @@
                            hostname === '::1';
 
             if (isLocal) {
-                // Localhost configuration
-                window.FUNCTIONS_URL = 'http://localhost:7172';
-                window.FUNCTION_KEY = 'Loyl89meoaRFWgIOfjTjJdJg3ZN9WfGguoghClu2Kp2HAzFuESIjXw==';
-                console.log('Running in LOCAL mode');
+                // Show modal to choose endpoint
+                const modal = document.getElementById('env-select-modal');
+                const localBtn = document.getElementById('env-local-btn');
+                const remoteBtn = document.getElementById('env-remote-btn');
+
+                modal.classList.remove('hidden');
+
+                localBtn.addEventListener('click', () => {
+                    window.FUNCTIONS_URL = 'http://localhost:7172';
+                    window.FUNCTION_KEY = 'Loyl89meoaRFWgIOfjTjJdJg3ZN9WfGguoghClu2Kp2HAzFuESIjXw==';
+                    console.log('Running in LOCAL mode - connecting to localhost:7172');
+                    modal.classList.add('hidden');
+
+                    // Trigger app initialization
+                    window.dispatchEvent(new CustomEvent('env-selected'));
+                });
+
+                remoteBtn.addEventListener('click', () => {
+                    window.FUNCTIONS_URL = 'https://sterobson-personal.azurewebsites.net';
+                    window.FUNCTION_KEY = 'wK5Hom6IL-8jrjczudS6pdUIBX9expUMQKf5iui0af_6AzFukVzLeg==';
+                    console.log('Running in LOCAL mode - connecting to REMOTE Azure Functions');
+                    modal.classList.add('hidden');
+
+                    // Trigger app initialization
+                    window.dispatchEvent(new CustomEvent('env-selected'));
+                });
             } else {
-                // Production configuration
+                // Production configuration (GitHub Pages)
                 window.FUNCTIONS_URL = 'https://sterobson-personal.azurewebsites.net';
                 window.FUNCTION_KEY = 'wK5Hom6IL-8jrjczudS6pdUIBX9expUMQKf5iui0af_6AzFukVzLeg==';
                 console.log('Running in PRODUCTION mode');
+
+                // Trigger app initialization immediately
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('env-selected'));
+                }, 0);
             }
         })();
     </script>
