@@ -70,7 +70,7 @@ button svg {
 /* Only position icons left when button has text (menu buttons) */
 aside button svg {
     position: absolute;
-    left: 1.5rem;
+    left: 0.75rem;
 }
 
 h1 {
@@ -139,6 +139,7 @@ button {
     width: 80vw;
     height: 4rem;
     margin: 1rem 1rem;
+    padding: 0 0.5rem;
     border-radius: 1rem;
     border: none;
     background: rgb(255, 163, 0);
@@ -151,6 +152,9 @@ button {
     position: relative;
     text-align: center;
 
+    aside & {
+        font-size: calc(var(--default-font-size) * 0.85);
+    }
 }
 
 button:active {
@@ -310,32 +314,46 @@ aside.open {
     }
 }
 
-/* Edit indicator */
-.edit-indicator {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.75rem;
+/* Edit cancel button (floats in top-right of content area) */
+.edit-cancel-btn {
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+    width: 3.5rem;
+    height: 3.5rem;
     background: #f41c5e;
-    color: white;
-    font-size: calc(var(--default-font-size) * 0.8);
-    font-weight: 700;
-    padding: 0.75rem 1.5rem;
-    margin: 1rem auto 0.5rem auto;
-    border-radius: 0.75rem;
-    width: 80vw;
-    box-shadow: 0 4px 12px rgba(244, 28, 94, 0.3);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0.75rem;
+    margin: 0;
+    box-shadow: 0 4px 12px rgba(244, 28, 94, 0.4);
+    border: none;
+    z-index: 100;
     animation: slideIn 0.3s ease;
 
     svg {
-        width: auto;
-        height: 1.5rem;
+        width: 100%;
+        height: 100%;
         fill: white;
+    }
+
+    &:active {
+        background: #2e2966;
+        transform: scale(0.95);
     }
 
     &.hidden {
         display: none;
     }
+}
+
+/* Visual indicator that we're editing - colored border on code label */
+#code-label.editing {
+    border: 3px solid #f41c5e;
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(244, 28, 94, 0.05);
 }
 
 /* Mode selection styling */
@@ -402,6 +420,7 @@ aside.open {
     justify-content: flex-start;
     margin-bottom: 7rem;
     padding-top: 1rem;
+    position: relative;
 
     &.hidden {
         display: none;

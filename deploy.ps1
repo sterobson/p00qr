@@ -1,12 +1,36 @@
 #!/usr/bin/env pwsh
 # Deployment script for parkrun P00Qr app
 
-Write-Host "`n=== P00Qr Deployment Script ===" -ForegroundColor Cyan
+# Color functions for better output
+function Write-Info($message) { Write-Host $message -ForegroundColor Cyan }
+function Write-Success($message) { Write-Host $message -ForegroundColor Green }
+function Write-Warning($message) { Write-Host $message -ForegroundColor Yellow }
+function Write-Error($message) { Write-Host $message -ForegroundColor Red }
+function Write-Gray($message) { Write-Host $message -ForegroundColor Gray }
+
+# Configuration
+$config = @{
+    Frontend = @{
+        Url = "https://sterobson.github.io/parkrunPositionQrCode/"
+    }
+    Backend = @{
+        AppName = "sterobson-personal"
+        ProjectPath = "Backend\P00Qr.Backend.Functions"
+    }
+}
+
+# Banner
 Write-Host ""
-Write-Host "Select deployment option:" -ForegroundColor Yellow
-Write-Host "  1) Deploy Frontend (GitHub Pages)"
-Write-Host "  2) Deploy Backend (Azure Functions)"
-Write-Host "  3) Deploy Both"
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  P00Qr Deployment Tool" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Ask what to deploy
+Write-Warning "Select deployment option:"
+Write-Host "  1) Deploy Frontend (GitHub Pages)" -ForegroundColor White
+Write-Host "  2) Deploy Backend (Azure Functions)" -ForegroundColor White
+Write-Host "  3) Deploy Both" -ForegroundColor White
 Write-Host ""
 
 $choice = Read-Host "Enter your choice (1-3)"
@@ -22,170 +46,274 @@ switch ($choice) {
         $deployBackend = $true
     }
     default {
-        Write-Host "Invalid choice. Exiting." -ForegroundColor Red
+        Write-Error "Invalid choice. Exiting."
         exit 1
     }
 }
 
-# Function to deploy frontend
-function Deploy-Frontend {
-    Write-Host "`n--- Deploying Frontend ---" -ForegroundColor Cyan
+Write-Host ""
+Write-Info "Deploying:"
+if ($deployFrontend) { Write-Gray "  - Frontend (GitHub Pages)" }
+if ($deployBackend) { Write-Gray "  - Backend (Azure Functions)" }
+Write-Host ""
+
+$deploymentSuccess = $true
+
+# ============================================================================
+# Deploy Frontend
+# ============================================================================
+if ($deployFrontend) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Info "  Deploying Frontend"
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
 
     # Check if there are uncommitted changes
     $gitStatus = git status --porcelain
     if ($gitStatus) {
-        Write-Host "Warning: You have uncommitted changes." -ForegroundColor Yellow
-        $continue = Read-Host "Continue anyway? (y/n)"
+        Write-Warning "You have uncommitted changes."
+        Write-Gray "The deployment will not affect your working directory."
+        $continue = Read-Host "Continue? (y/n)"
         if ($continue -ne "y") {
-            Write-Host "Deployment cancelled." -ForegroundColor Red
-            return $false
+            Write-Warning "Deployment cancelled."
+            $deploymentSuccess = $false
         }
     }
 
-    try {
-        # Deploy to GitHub Pages using gh-pages branch
-        Write-Host "Deploying to GitHub Pages..." -ForegroundColor Gray
-        Write-Host "Note: Auto-detection will use production config when deployed" -ForegroundColor Gray
+    if ($deploymentSuccess) {
+        try {
+            Write-Info "Deploying to GitHub Pages..."
+            Write-Gray "Note: Auto-detection will use production config when deployed"
+            Write-Host ""
 
-        # Add all files to git
-        git add .
-        git commit -m "Deploy to GitHub Pages" 2>&1 | Out-Null
+            # Use git worktree to deploy to gh-pages branch (SAFE - doesn't touch main working tree)
+            Write-Gray "Setting up deployment worktree..."
 
-        # Check if gh-pages branch exists
-        $branchExists = git branch -r | Select-String "origin/gh-pages"
+            # Create temp directory for gh-pages worktree
+            $worktreePath = Join-Path $env:TEMP "gh-pages-deploy-$(Get-Date -Format 'yyyyMMddHHmmss')"
 
-        if ($branchExists) {
-            # Push to existing gh-pages branch using subtree
-            git push origin `git subtree split --prefix . main`:refs/heads/gh-pages --force
-        } else {
-            # Create and push to new gh-pages branch
-            git subtree push --prefix . origin gh-pages
-        }
-
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "Frontend deployed successfully to GitHub Pages!" -ForegroundColor Green
-            Write-Host "URL: https://sterobson.github.io/parkrunPositionQrCode/" -ForegroundColor Cyan
-            $result = $true
-        } else {
-            Write-Host "Frontend deployment failed!" -ForegroundColor Red
-            $result = $false
-        }
-
-        # Reset the commit
-        git reset HEAD~1 2>&1 | Out-Null
-    }
-    catch {
-        Write-Host "Error during frontend deployment: $_" -ForegroundColor Red
-        $result = $false
-    }
-
-    return $result
-}
-
-# Function to deploy backend
-function Deploy-Backend {
-    Write-Host "`n--- Deploying Backend ---" -ForegroundColor Cyan
-
-    # Check if Azure Functions Core Tools is installed
-    $funcInstalled = Get-Command func -ErrorAction SilentlyContinue
-
-    if ($funcInstalled) {
-        Write-Host "Azure Functions Core Tools detected." -ForegroundColor Green
-        Write-Host ""
-        Write-Host "Backend deployment options:" -ForegroundColor Yellow
-        Write-Host "  1) Deploy using func CLI (func azure functionapp publish)"
-        Write-Host "  2) Open in Visual Studio (manual publish)"
-        Write-Host ""
-
-        $backendChoice = Read-Host "Enter your choice (1-2)"
-
-        if ($backendChoice -eq "1") {
-            # Deploy using func CLI
-            $functionAppName = "sterobson-personal"
-            Write-Host "Deploying to Azure Function App: $functionAppName..." -ForegroundColor Gray
-
-            Push-Location "Backend\P00Qr.Backend.Functions"
             try {
-                func azure functionapp publish $functionAppName --csharp
+                # Fetch latest gh-pages
+                git fetch origin gh-pages:gh-pages 2>&1 | Out-Null
 
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Backend deployed successfully!" -ForegroundColor Green
-                    return $true
-                } else {
-                    Write-Host "Backend deployment failed!" -ForegroundColor Red
-                    return $false
+                # Create worktree for gh-pages branch
+                git worktree add $worktreePath gh-pages 2>&1 | Out-Null
+
+                if ($LASTEXITCODE -ne 0) {
+                    # gh-pages branch doesn't exist, create orphan branch
+                    Write-Warning "gh-pages branch doesn't exist, creating it..."
+                    git worktree add --detach $worktreePath 2>&1 | Out-Null
+                    Push-Location $worktreePath
+                    git checkout --orphan gh-pages 2>&1 | Out-Null
+                    git rm -rf . 2>&1 | Out-Null
+                    Pop-Location
+                }
+
+                Push-Location $worktreePath
+
+                try {
+                    # Clean the worktree (remove old files)
+                    Write-Gray "Cleaning deployment directory..."
+                    Get-ChildItem -Path $worktreePath -Exclude ".git" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+                    # Copy files from main branch to worktree
+                    Write-Gray "Copying files to deployment directory..."
+
+                    # Get list of files to deploy from main branch (exclude Backend, .git, etc.)
+                    $sourceRoot = $PSScriptRoot
+
+                    # Copy specific frontend files and directories
+                    $itemsToCopy = @(
+                        "index.html",
+                        "styles.css",
+                        "favicon.svg",
+                        "scripts",
+                        "public"
+                    )
+
+                    foreach ($item in $itemsToCopy) {
+                        $sourcePath = Join-Path $sourceRoot $item
+                        if (Test-Path $sourcePath) {
+                            Copy-Item -Path $sourcePath -Destination $worktreePath -Recurse -Force
+                        } else {
+                            Write-Gray "  Skipping $item (not found)"
+                        }
+                    }
+
+                    # Add .nojekyll file
+                    $nojekyll = Join-Path $worktreePath ".nojekyll"
+                    if (-not (Test-Path $nojekyll)) {
+                        New-Item -ItemType File -Path $nojekyll -Force | Out-Null
+                    }
+
+                    # Commit and push
+                    git add -A 2>&1 | Out-Null
+
+                    $commitMessage = "Deploy frontend - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+                    git commit -m $commitMessage 2>&1 | Out-Null
+
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Gray "Pushing to GitHub..."
+                        git push origin gh-pages 2>&1 | Out-Null
+
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Success "Frontend deployed to GitHub Pages!"
+                            Write-Gray "URL: $($config.Frontend.Url)"
+                        } else {
+                            Write-Error "Failed to push to GitHub"
+                            $deploymentSuccess = $false
+                        }
+                    } else {
+                        Write-Warning "No changes to commit"
+                    }
+                } finally {
+                    Pop-Location
+                }
+            } finally {
+                # Remove the worktree
+                if (Test-Path $worktreePath) {
+                    git worktree remove $worktreePath --force 2>&1 | Out-Null
                 }
             }
-            finally {
-                Pop-Location
+        }
+        catch {
+            Write-Error "Error during frontend deployment: $_"
+            $deploymentSuccess = $false
+        }
+    }
+}
+
+# ============================================================================
+# Deploy Backend (Azure Functions)
+# ============================================================================
+if ($deployBackend) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Info "  Deploying Backend (Azure Functions)"
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    $backendPath = Join-Path $PSScriptRoot $config.Backend.ProjectPath
+
+    if (-not (Test-Path $backendPath)) {
+        Write-Error "Backend directory not found at: $backendPath"
+        $deploymentSuccess = $false
+    } else {
+        # Check if func tool is installed
+        Write-Info "Checking Azure Functions Core Tools..."
+
+        $funcVersion = func --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Azure Functions Core Tools not found!"
+            Write-Host ""
+            Write-Warning "Install Azure Functions Core Tools:"
+            Write-Gray "  npm install -g azure-functions-core-tools@4"
+            Write-Gray "  or: winget install Microsoft.Azure.FunctionsCoreTools"
+            Write-Host ""
+            $deploymentSuccess = $false
+        } else {
+            Write-Success "Azure Functions Core Tools found (version: $funcVersion)"
+
+            # Check Azure authentication
+            Write-Info "Checking Azure authentication..."
+
+            $azCommand = Get-Command az -ErrorAction SilentlyContinue
+            if (-not $azCommand) {
+                Write-Warning "Azure CLI (az) not found - skipping authentication check"
+                Write-Gray "  Install from: https://aka.ms/installazurecliwindows"
+                Write-Success "Continuing with deployment (authentication will be checked during func azure functionapp publish)"
+            } else {
+                $azResult = az account show 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Not authenticated with Azure!"
+                    Write-Host ""
+                    Write-Warning "Please login to Azure:"
+                    Write-Gray "  az login"
+                    Write-Host ""
+                    $deploymentSuccess = $false
+                } else {
+                    Write-Success "Authenticated with Azure"
+                }
+            }
+
+            if ($deploymentSuccess) {
+                Push-Location $backendPath
+
+                try {
+                    # Build
+                    Write-Host ""
+                    Write-Info "Building backend..."
+                    dotnet build -c Release --nologo
+
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Error "Backend build failed"
+                        $deploymentSuccess = $false
+                    } else {
+                        Write-Success "Backend build completed"
+
+                        # Deploy
+                        Write-Host ""
+                        Write-Info "Deploying to Azure..."
+                        Write-Gray "Function App: $($config.Backend.AppName)"
+                        Write-Gray "This may take a few minutes..."
+                        Write-Host ""
+
+                        $ErrorActionPreference = "Continue"
+                        func azure functionapp publish $config.Backend.AppName --dotnet-isolated 2>&1 | ForEach-Object {
+                            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                                if ($_.Exception.Message -and $_.Exception.Message.Trim()) {
+                                    Write-Host $_.Exception.Message
+                                }
+                            } else {
+                                Write-Host $_
+                            }
+                        }
+                        $ErrorActionPreference = "Stop"
+
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Host ""
+                            Write-Success "Backend deployed to Azure!"
+                            Write-Gray "Function App: $($config.Backend.AppName)"
+                        } else {
+                            Write-Error "Backend deployment failed"
+                            $deploymentSuccess = $false
+                        }
+                    }
+                } finally {
+                    Pop-Location
+                }
             }
         }
-        elseif ($backendChoice -eq "2") {
-            # Open in Visual Studio
-            Write-Host "Opening solution in Visual Studio..." -ForegroundColor Gray
-            Start-Process "Backend\parkrunPositionQrCode.sln"
-            Write-Host "Please publish the backend manually from Visual Studio." -ForegroundColor Yellow
-            Write-Host "Press Enter when deployment is complete..." -ForegroundColor Yellow
-            Read-Host
-            return $true
-        }
-        else {
-            Write-Host "Invalid choice. Skipping backend deployment." -ForegroundColor Red
-            return $false
-        }
-    }
-    else {
-        # func CLI not installed, open Visual Studio
-        Write-Host "Azure Functions Core Tools not found." -ForegroundColor Yellow
-        Write-Host "Opening solution in Visual Studio for manual publish..." -ForegroundColor Gray
-
-        if (Test-Path "Backend\parkrunPositionQrCode.sln") {
-            Start-Process "Backend\parkrunPositionQrCode.sln"
-            Write-Host "Please publish the backend manually from Visual Studio." -ForegroundColor Yellow
-            Write-Host "Press Enter when deployment is complete..." -ForegroundColor Yellow
-            Read-Host
-            return $true
-        }
-        else {
-            Write-Host "Solution file not found at Backend\parkrunPositionQrCode.sln" -ForegroundColor Red
-            return $false
-        }
     }
 }
 
-# Execute deployments
-$frontendSuccess = $true
-$backendSuccess = $true
-
-if ($deployFrontend) {
-    $frontendSuccess = Deploy-Frontend
-}
-
-if ($deployBackend) {
-    $backendSuccess = Deploy-Backend
-}
-
+# ============================================================================
 # Summary
-Write-Host "`n=== Deployment Summary ===" -ForegroundColor Cyan
-if ($deployFrontend) {
-    if ($frontendSuccess) {
-        Write-Host "Frontend: SUCCESS" -ForegroundColor Green
-    } else {
-        Write-Host "Frontend: FAILED" -ForegroundColor Red
-    }
+# ============================================================================
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+if ($deploymentSuccess) {
+    Write-Success "  Deployment Complete!"
+} else {
+    Write-Error "  Deployment Failed!"
 }
-if ($deployBackend) {
-    if ($backendSuccess) {
-        Write-Host "Backend: SUCCESS" -ForegroundColor Green
-    } else {
-        Write-Host "Backend: FAILED" -ForegroundColor Red
-    }
-}
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
 
-if ($frontendSuccess -and $backendSuccess) {
-    Write-Host "`nAll deployments completed successfully!" -ForegroundColor Green
+if ($deploymentSuccess) {
+    if ($deployFrontend) {
+        Write-Host "  [OK] Frontend -> GitHub Pages" -ForegroundColor Green
+        Write-Gray "       $($config.Frontend.Url)"
+    }
+    if ($deployBackend) {
+        Write-Host "  [OK] Backend -> Azure Functions" -ForegroundColor Green
+        Write-Gray "       App: $($config.Backend.AppName)"
+    }
+    Write-Host ""
     exit 0
 } else {
-    Write-Host "`nSome deployments failed. Please check the output above." -ForegroundColor Red
+    Write-Host "Some deployments failed. Please check the errors above." -ForegroundColor Red
+    Write-Host ""
     exit 1
 }

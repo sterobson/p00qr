@@ -19,8 +19,7 @@ export class UIService {
         this.historyEmpty = document.getElementById('history-empty');
         this.historyIcon = document.getElementById('history-icon');
         this.historyBadge = document.getElementById('history-badge');
-        this.editIndicator = document.getElementById('edit-indicator');
-        this.editIndicatorText = document.getElementById('edit-indicator-text');
+        this.editCancelBtn = document.getElementById('edit-cancel-btn');
 
         // Mode elements
         this.modeSelection = document.getElementById('mode-selection');
@@ -66,6 +65,9 @@ export class UIService {
     setupListeners() {
         // Take next token button
         this.takeNextBtn.addEventListener('click', () => this.handleTakeNextToken());
+
+        // Edit cancel button
+        this.editCancelBtn.addEventListener('click', () => this.returnToGiveTokenState());
 
         // Mode selection buttons
         this.modeScanBtn.addEventListener('click', () => this.switchMode('scan'));
@@ -170,7 +172,7 @@ export class UIService {
 
         if (Math.abs(diff) < threshold || !this.state.currentMode) return;
 
-        const modes = ['scan', 'manual', 'qr'];
+        const modes = ['qr', 'manual', 'scan'];
         const currentIndex = modes.indexOf(this.state.currentMode);
 
         if (diff > 0 && currentIndex < modes.length - 1) {
@@ -211,8 +213,8 @@ export class UIService {
         console.log(`Taking next token: P${this.pad(clampedVal)}`);
         this.signalR.sendTokenUsed(clampedVal);
 
-        // Set mode to preferred or default to scan
-        const mode = this.state.preferredMode || 'scan';
+        // Set mode to preferred or default to qr
+        const mode = this.state.preferredMode || 'qr';
         this.state.currentMode = mode;
         this.switchMode(mode);
 
@@ -230,46 +232,49 @@ export class UIService {
         this.barcodeService.stopReadBarcode();
         this.scannedData = null;
 
-        // Hide all mode content
-        this.scanModeDiv.classList.add('hidden');
-        this.manualModeDiv.classList.add('hidden');
-        this.qrModeDiv.classList.add('hidden');
+        // Batch DOM updates to reduce flickering
+        requestAnimationFrame(() => {
+            // Hide all mode content
+            this.scanModeDiv.classList.add('hidden');
+            this.manualModeDiv.classList.add('hidden');
+            this.qrModeDiv.classList.add('hidden');
 
-        // Update mode button states
-        this.modeScanBtn.classList.remove('active');
-        this.modeManualBtn.classList.remove('active');
-        this.modeQrBtn.classList.remove('active');
+            // Update mode button states
+            this.modeScanBtn.classList.remove('active');
+            this.modeManualBtn.classList.remove('active');
+            this.modeQrBtn.classList.remove('active');
 
-        // Show selected mode
-        if (mode === 'scan') {
-            this.modeScanBtn.classList.add('active');
-            this.scanModeDiv.classList.remove('hidden');
-            this.scanConfirmation.classList.add('hidden');
-            this.startScanning();
-        } else if (mode === 'manual') {
-            this.modeManualBtn.classList.add('active');
-            this.manualModeDiv.classList.remove('hidden');
+            // Show selected mode
+            if (mode === 'scan') {
+                this.modeScanBtn.classList.add('active');
+                this.scanModeDiv.classList.remove('hidden');
+                this.scanConfirmation.classList.add('hidden');
+                this.startScanning();
+            } else if (mode === 'manual') {
+                this.modeManualBtn.classList.add('active');
+                this.manualModeDiv.classList.remove('hidden');
 
-            // Pre-fill if data provided, otherwise clear
-            if (prefillData) {
-                this.athleteBarcodeInput.value = prefillData.athleteBarcode || '';
-                this.athleteNameInput.value = prefillData.athleteName || '';
-            } else {
-                this.athleteBarcodeInput.value = '';
-                this.athleteNameInput.value = '';
+                // Pre-fill if data provided, otherwise clear
+                if (prefillData) {
+                    this.athleteBarcodeInput.value = prefillData.athleteBarcode || '';
+                    this.athleteNameInput.value = prefillData.athleteName || '';
+                } else {
+                    this.athleteBarcodeInput.value = '';
+                    this.athleteNameInput.value = '';
+                }
+                this.athleteBarcodeInput.focus();
+            } else if (mode === 'qr') {
+                this.modeQrBtn.classList.add('active');
+                this.qrModeDiv.classList.remove('hidden');
+                // Defer QR rendering until after the element is visible
+                requestAnimationFrame(() => {
+                    this.renderPositionQR();
+                });
             }
-            this.athleteBarcodeInput.focus();
-        } else if (mode === 'qr') {
-            this.modeQrBtn.classList.add('active');
-            this.qrModeDiv.classList.remove('hidden');
-            // Defer QR rendering until after the element is visible
-            requestAnimationFrame(() => {
-                this.renderPositionQR();
-            });
-        }
 
-        // Update the UI to reflect mode change (especially for QR mode button text)
-        this.updateUI();
+            // Update the UI to reflect mode change (especially for QR mode button text)
+            this.updateUI();
+        });
     }
 
     startScanning() {
@@ -501,15 +506,29 @@ export class UIService {
             this.codeLabel.classList.remove('hide');
             this.nocodeLabel.classList.add('hide');
 
-            // If editing existing, show edit indicator and "Cancel" button
+            // If editing existing, show edit cancel button and style the label
             if (this.state.isEditingExisting) {
-                this.editIndicator.classList.remove('hidden');
-                this.editIndicatorText.textContent = `Editing P${this.pad(this.state.event.currentToken)}`;
-                this.takeNextBtn.textContent = 'Cancel';
+                this.editCancelBtn.classList.remove('hidden');
+                this.codeLabel.classList.add('editing');
+
+                // In QR mode when editing, show next token button
+                if (this.state.currentMode === 'qr') {
+                    const nextToken = this.state.event.nextToken;
+                    if (nextToken === 0) {
+                        this.takeNextBtn.textContent = 'Give next token';
+                    } else {
+                        this.takeNextBtn.textContent = `Give token P${this.pad(nextToken)}`;
+                    }
+                } else {
+                    // Hide the main button in scan/manual modes when editing
+                    this.takeNextBtn.style.display = 'none';
+                }
             }
             // In QR mode (new token), show "Give token P####" for next token
             else if (this.state.currentMode === 'qr') {
-                this.editIndicator.classList.add('hidden');
+                this.editCancelBtn.classList.add('hidden');
+                this.codeLabel.classList.remove('editing');
+                this.takeNextBtn.style.display = 'flex';
                 const nextToken = this.state.event.nextToken;
                 if (nextToken === 0) {
                     this.takeNextBtn.textContent = 'Give next token';
@@ -517,14 +536,16 @@ export class UIService {
                     this.takeNextBtn.textContent = `Give token P${this.pad(nextToken)}`;
                 }
             }
-            // In other modes (new token), show "Cancel"
+            // In other modes (new token), hide the main button
             else {
-                this.editIndicator.classList.add('hidden');
-                this.takeNextBtn.textContent = 'Cancel';
+                this.editCancelBtn.classList.add('hidden');
+                this.codeLabel.classList.remove('editing');
+                this.takeNextBtn.style.display = 'none';
             }
         } else {
             // Show "Give token" button
-            this.editIndicator.classList.add('hidden');
+            this.editCancelBtn.classList.add('hidden');
+            this.codeLabel.classList.remove('editing');
             this.modeSelection.classList.add('hidden');
             this.contentArea.classList.add('hidden');
             this.scanModeDiv.classList.add('hidden');
@@ -532,6 +553,7 @@ export class UIService {
             this.qrModeDiv.classList.add('hidden');
             this.codeLabel.classList.add('hide');
             this.nocodeLabel.classList.remove('hide');
+            this.takeNextBtn.style.display = 'flex';
 
             const nextToken = this.state.event.nextToken;
             if (nextToken === 0) {
@@ -572,8 +594,13 @@ export class UIService {
                 }, 500);
             }, 500);
         } else {
-            // First render, no animation
+            // First render - fade in smoothly
+            this.qrDiv.style.opacity = '0';
             this.renderQR(this.qrDiv, qrText);
+            requestAnimationFrame(() => {
+                this.qrDiv.style.transition = 'opacity 0.3s ease-in';
+                this.qrDiv.style.opacity = '1';
+            });
         }
     }
 
