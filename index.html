@@ -33,10 +33,10 @@
 
         <!-- Mode selection buttons -->
         <div id="mode-selection" class="mode-selection hidden">
-            <button id="mode-scan" class="mode-button" data-mode="scan" title="Scan barcode">
+            <button id="mode-qr" class="mode-button" data-mode="qr" title="Show QR code">
                 <!--!Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.-->
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-                    <path d="M149.1 64.8L138.7 96H64C28.7 96 0 124.7 0 160V416c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V160c0-35.3-28.7-64-64-64H373.3L362.9 64.8C356.4 45.2 338.1 32 317.4 32H194.6c-20.7 0-39 13.2-45.5 32.8zM256 192a96 96 0 1 1 0 192 96 96 0 1 1 0-192z"/>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
+                    <path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512l388.6 0c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304l-91.4 0z"/>
                 </svg>
             </button>
             <button id="mode-manual" class="mode-button" data-mode="manual" title="Manual entry">
@@ -45,24 +45,22 @@
                     <path d="M421.7 220.3L188.5 453.4L154.6 419.5L158.1 416H112C103.2 416 96 408.8 96 400V353.9L92.51 357.4C87.78 362.2 84.31 368 82.42 374.4L59.44 452.6C56.46 463.1 61.86 474.5 72.33 477.5C73.94 477.1 75.58 478.2 77.2 478.2C84.66 478.2 91.76 474.3 95.62 467.4L137.2 390.5L84.84 338.2C70.28 323.6 70.28 299.9 84.84 285.3L314.1 56.08C328.7 41.51 352.4 41.51 366.1 56.08L456.9 146.9C471.5 161.5 471.5 185.2 456.9 199.7L421.7 220.3zM492.7 58.75C519.8 85.88 519.8 129.1 492.7 156.1L411.7 237.1L274.9 100.3L355.9 19.27C382.1-7.85 426.1-7.85 453.3 19.27L492.7 58.75z"/>
                 </svg>
             </button>
-            <button id="mode-qr" class="mode-button" data-mode="qr" title="Show QR code">
+            <button id="mode-scan" class="mode-button" data-mode="scan" title="Scan barcode">
                 <!--!Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.-->
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
-                    <path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512l388.6 0c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304l-91.4 0z"/>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                    <path d="M149.1 64.8L138.7 96H64C28.7 96 0 124.7 0 160V416c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V160c0-35.3-28.7-64-64-64H373.3L362.9 64.8C356.4 45.2 338.1 32 317.4 32H194.6c-20.7 0-39 13.2-45.5 32.8zM256 192a96 96 0 1 1 0 192 96 96 0 1 1 0-192z"/>
                 </svg>
             </button>
         </div>
 
-        <!-- Edit indicator -->
-        <div id="edit-indicator" class="edit-indicator hidden">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-                <path d="M421.7 220.3L188.5 453.4L154.6 419.5L158.1 416H112C103.2 416 96 408.8 96 400V353.9L92.51 357.4C87.78 362.2 84.31 368 82.42 374.4L59.44 452.6C56.46 463.1 61.86 474.5 72.33 477.5C73.94 477.1 75.58 478.2 77.2 478.2C84.66 478.2 91.76 474.3 95.62 467.4L137.2 390.5L84.84 338.2C70.28 323.6 70.28 299.9 84.84 285.3L314.1 56.08C328.7 41.51 352.4 41.51 366.1 56.08L456.9 146.9C471.5 161.5 471.5 185.2 456.9 199.7L421.7 220.3zM492.7 58.75C519.8 85.88 519.8 129.1 492.7 156.1L411.7 237.1L274.9 100.3L355.9 19.27C382.1-7.85 426.1-7.85 453.3 19.27L492.7 58.75z"/>
-            </svg>
-            <span id="edit-indicator-text">Editing P0000</span>
-        </div>
-
         <!-- Content area for different modes -->
         <div id="content-area" class="content-area">
+            <!-- Edit cancel button (floats in top-right of content area) -->
+            <button id="edit-cancel-btn" class="edit-cancel-btn hidden" title="Cancel editing">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
+                    <path d="M320 576C461.4 576 576 461.4 576 320C576 178.6 461.4 64 320 64C178.6 64 64 178.6 64 320C64 461.4 178.6 576 320 576zM231 231C240.4 221.6 255.6 221.6 264.9 231L319.9 286L374.9 231C384.3 221.6 399.5 221.6 408.8 231C418.1 240.4 418.2 255.6 408.8 264.9L353.8 319.9L408.8 374.9C418.2 384.3 418.2 399.5 408.8 408.8C399.4 418.1 384.2 418.2 374.9 408.8L319.9 353.8L264.9 408.8C255.5 418.2 240.3 418.2 231 408.8C221.7 399.4 221.6 384.2 231 374.9L286 319.9L231 264.9C221.6 255.5 221.6 240.3 231 231z"/>
+                </svg>
+            </button>
             <!-- Scan mode -->
             <div id="scan-mode" class="mode-content hidden">
                 <video id="video" width="300" height="200"></video>
@@ -147,8 +145,8 @@
                 </button>
             </div>
 
-            <label>Scan this QR code to share the current event</label>
             <div id="eventQr"></div>
+            <p class="qr-instructions">Scan this QR code to share the current event</p>
         </main>
     </aside>
 
