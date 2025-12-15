@@ -87,6 +87,9 @@ export class UIService {
         document.getElementById('save-event-settings').addEventListener('click', () => this.saveEventDetails(false));
         document.getElementById('save-new-event-settings').addEventListener('click', () => this.saveEventDetails(true));
 
+        // Share data
+        document.getElementById('share-data').addEventListener('click', () => this.shareData());
+
         // Wire up open/close buttons based on 'opens' 'closes' attributes
         document.querySelectorAll('[opens]').forEach(button => {
             button.addEventListener('click', () => {
@@ -709,6 +712,92 @@ export class UIService {
         if (val === "") return "";
         val = parseInt(val, 10);
         return isNaN(val) ? "" : Math.max(0, Math.min(9999, val));
+    }
+
+    // Share data as CSV
+    async shareData() {
+        // Filter assignments that have both token and athlete barcode
+        const validAssignments = this.state.assignments.filter(a =>
+            a.token && a.athleteBarcode && a.athleteBarcode.trim() !== ''
+        );
+
+        if (validAssignments.length === 0) {
+            this.alert('No data to share. Please assign at least one athlete to a token.', '📋');
+            return;
+        }
+
+        // Sort by token number
+        const sorted = [...validAssignments].sort((a, b) => a.token - a.token);
+
+        // Get current timestamp for header
+        const now = new Date();
+        const headerTimestamp = this.formatTimestamp(now);
+
+        // Build CSV content
+        let csv = `Start of File,${headerTimestamp},${this.state.event.name || 'token_generator'}\n`;
+
+        sorted.forEach(assignment => {
+            const token = `P${this.pad(assignment.token)}`;
+            const timestamp = this.formatTimestamp(new Date(assignment.timestamp));
+            csv += `${assignment.athleteBarcode},${token},${timestamp}\n`;
+        });
+
+        csv += '\n'; // Empty line at end
+
+        // Create filename with event name and date
+        const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
+        const eventNameSafe = (this.state.event.name || 'event').replace(/[^a-zA-Z0-9]/g, '_');
+        const filename = `${eventNameSafe}_${dateStr}.csv`;
+
+        // Check if Web Share API is available
+        if (navigator.share && navigator.canShare) {
+            try {
+                const file = new File([csv], filename, { type: 'text/csv' });
+
+                if (navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'Token Assignments',
+                        text: `Token assignments for ${this.state.event.name || 'event'}`
+                    });
+                    console.log('Data shared successfully');
+                } else {
+                    // Fallback: download the file
+                    this.downloadCsv(csv, filename);
+                }
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('Error sharing:', error);
+                    // Fallback: download the file
+                    this.downloadCsv(csv, filename);
+                }
+            }
+        } else {
+            // Fallback: download the file
+            this.downloadCsv(csv, filename);
+        }
+    }
+
+    downloadCsv(csvContent, filename) {
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    formatTimestamp(date) {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
     }
 
     // Utility methods
