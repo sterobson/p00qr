@@ -910,7 +910,6 @@ aside.open {
 #save-confirmation-view {
     display: flex;
     align-items: center;
-    justify-content: center;
     width: 100%;
     height: 100%;
 
@@ -921,12 +920,11 @@ aside.open {
 
 .save-confirmation-message {
     text-align: center;
-    padding: 2rem;
+    padding: 0rem 2rem;
 
     .save-confirmation-icon {
         font-size: calc(var(--default-font-size) * 4);
         color: #2e2966;
-        margin-bottom: 1rem;
     }
 
     h2 {
