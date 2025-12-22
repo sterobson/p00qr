@@ -126,11 +126,12 @@ h1 {
     bottom: 0;
     left: 0;
     width: 100vw;
-    padding: 1.5rem 0 2.5rem 0;
+    padding: 0.75rem 0 1.5rem 0;
     display: flex;
     justify-content: center;
     z-index: 10;
-    background: linear-gradient(to bottom, rgba(242, 242, 242, 0) 0%, rgba(242, 242, 242, 1) 30%);
+    background: #f2f2f2;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
 }
 
 button {
@@ -159,6 +160,22 @@ button {
 
 button:active {
     background: #f41c5e;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+button.fading-out {
+    transition: opacity 0.5s ease, background 0.5s ease;
+    opacity: 0.3;
+    background: #999;
+}
+
+button.fading-in {
+    transition: opacity 0.5s ease, background 0.5s ease;
+    opacity: 1;
 }
 
 input {
@@ -348,6 +365,40 @@ aside.open {
     }
 }
 
+/* Edit delete button (floats in top-right, left of cancel button) */
+.edit-delete-btn {
+    position: absolute;
+    right: 5rem;
+    top: 1rem;
+    width: 3.5rem;
+    height: 3.5rem;
+    background: #f41c5e;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0.75rem;
+    margin: 0;
+    box-shadow: 0 4px 12px rgba(244, 28, 94, 0.4);
+    border: none;
+    z-index: 100;
+    animation: slideIn 0.3s ease;
+
+    svg {
+        width: 100%;
+        height: 100%;
+        fill: white;
+    }
+
+    &:active {
+        background: #2e2966;
+        transform: scale(0.95);
+    }
+
+    &.hidden {
+        display: none;
+    }
+}
+
 /* Visual indicator that we're editing - colored border on code label */
 #code-label.editing {
     border: 3px solid #f41c5e;
@@ -418,9 +469,10 @@ aside.open {
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    margin-bottom: 7rem;
-    padding-top: 1rem;
+    margin-bottom: 5rem;
+    padding-top: 0.5rem;
     position: relative;
+    overflow-y: auto;
 
     &.hidden {
         display: none;
@@ -434,7 +486,7 @@ aside.open {
     align-items: center;
     justify-content: flex-start;
     flex: 1;
-    padding-top: 1rem;
+    padding: 0.5rem 0;
 
     &.hidden {
         display: none;
@@ -498,9 +550,9 @@ aside.open {
     font-size: calc(var(--default-font-size) * 0.7);
     color: #666;
     text-align: center;
-    margin: 1.5rem 2rem 0 2rem;
+    margin: 0.5rem;
     line-height: 1.5;
-    max-width: 80vw;
+    max-width: 90vw;
 }
 
 .hidden {
@@ -511,8 +563,9 @@ aside.open {
 .history-message {
     text-align: center;
     color: #999;
-    margin: 2rem 0;
+    margin: 2rem auto;
     font-size: calc(var(--default-font-size) * 0.8);
+    width: 90%;
 
     &.hidden {
         display: none;
@@ -614,6 +667,23 @@ aside.open {
     }
 }
 
+.history-created-by {
+    font-size: calc(var(--default-font-size) * 0.55);
+    color: #2e2966;
+    font-weight: 700;
+    margin-top: 0.15rem;
+    opacity: 0.7;
+
+    .history-item:active & {
+        color: white;
+        opacity: 1;
+    }
+
+    .history-item.remote & {
+        color: #666;
+    }
+}
+
 .history-edit-icon {
     width: 1.5rem;
     height: 1.5rem;
@@ -630,17 +700,14 @@ aside.open {
 
 /* Inline history view */
 #history-view {
-    padding: 1rem;
-    overflow-y: auto;
-    max-height: 50vh;
-    width: 90%;
-    margin: 0 auto;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 
-    h3 {
-        margin: 0 0 1rem 0;
-        font-size: calc(var(--default-font-size) * 1.0);
-        color: #2e2966;
-        font-weight: 700;
+    &.hidden {
+        display: none;
     }
 }
 
@@ -648,7 +715,11 @@ aside.open {
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
-    width: 100%;
+    width: 90%;
+    margin: 0 auto;
+    overflow-y: auto;
+    flex: 1;
+    padding: 1rem 0;
 }
 
 /* Environment selection modal */
@@ -807,14 +878,16 @@ aside.open {
 #qr-mode.sliding-out,
 #manual-mode.sliding-out,
 #scan-mode.sliding-out,
-#history-view.sliding-out {
+#history-view.sliding-out,
+#save-confirmation-view.sliding-out {
     animation: qrSlideOut 0.5s ease-in-out forwards;
 }
 
 #qr-mode.sliding-in,
 #manual-mode.sliding-in,
 #scan-mode.sliding-in,
-#history-view.sliding-in {
+#history-view.sliding-in,
+#save-confirmation-view.sliding-in {
     animation: qrSlideIn 0.5s ease-in-out forwards;
     transform: translateX(-100vw);
 }
@@ -830,5 +903,42 @@ aside.open {
     }
     to {
         transform: rotate(360deg);
+    }
+}
+
+/* Save confirmation view */
+#save-confirmation-view {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+
+    &.hidden {
+        display: none;
+    }
+}
+
+.save-confirmation-message {
+    text-align: center;
+    padding: 2rem;
+
+    .save-confirmation-icon {
+        font-size: calc(var(--default-font-size) * 4);
+        color: #2e2966;
+        margin-bottom: 1rem;
+    }
+
+    h2 {
+        font-size: calc(var(--default-font-size) * 1.2);
+        color: #2e2966;
+        margin: 0 0 0.5rem 0;
+        font-weight: 700;
+    }
+
+    p {
+        font-size: calc(var(--default-font-size) * 0.8);
+        color: #666;
+        margin: 0;
     }
 }

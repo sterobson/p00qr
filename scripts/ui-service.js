@@ -7,6 +7,9 @@ export class UIService {
         this.barcodeService = barcodeService;
         this.isTokenTransitioning = false; // Track if we're animating a token change
         this.lastRenderedToken = null; // Track last rendered token to avoid unnecessary animations
+        this.showingSaveConfirmation = false; // Track if we're showing save confirmation
+        this.scannedDataBeforeEdit = null; // Track scanned data before user edits
+        this.userEditedAfterScan = false; // Track if user edited data after scan
 
         // Get DOM elements
         this.positionInput = document.getElementById('position');
@@ -20,7 +23,9 @@ export class UIService {
         this.historyEmpty = document.getElementById('history-empty');
         this.historyIcon = document.getElementById('history-icon');
         this.historyBadge = document.getElementById('history-badge');
+        this.historyCloseBtn = document.getElementById('history-close-btn');
         this.editCancelBtn = document.getElementById('edit-cancel-btn');
+        this.editDeleteBtn = document.getElementById('edit-delete-btn');
 
         // Mode elements
         this.modeSelection = document.getElementById('mode-selection');
@@ -31,6 +36,8 @@ export class UIService {
         this.historyViewDiv = document.getElementById('history-view');
         this.historyViewList = document.getElementById('history-view-list');
         this.historyViewEmpty = document.getElementById('history-view-empty');
+        this.saveConfirmationView = document.getElementById('save-confirmation-view');
+        this.saveConfirmationToken = document.getElementById('save-confirmation-token');
 
         // Mode buttons
         this.modeScanBtn = document.getElementById('mode-scan');
@@ -73,6 +80,9 @@ export class UIService {
         // Edit cancel button
         this.editCancelBtn.addEventListener('click', () => this.returnToGiveTokenState());
 
+        // Edit delete button
+        this.editDeleteBtn.addEventListener('click', () => this.handleDeleteAthleteData());
+
         // Mode selection buttons
         this.modeScanBtn.addEventListener('click', () => this.switchMode('scan'));
         this.modeManualBtn.addEventListener('click', () => this.switchMode('manual'));
@@ -87,12 +97,54 @@ export class UIService {
             this.handleSaveManual();
         });
 
+        // Handle ENTER key in barcode field - submit instead of tab to next field
+        this.athleteBarcodeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.handleSaveManual();
+            }
+        });
+
+        // Track if user edits data after scan
+        this.athleteBarcodeInput.addEventListener('input', () => {
+            if (this.scannedDataBeforeEdit) {
+                this.userEditedAfterScan = true;
+            }
+        });
+        this.athleteNameInput.addEventListener('input', () => {
+            if (this.scannedDataBeforeEdit) {
+                this.userEditedAfterScan = true;
+            }
+        });
+
         // Event settings
         document.getElementById('save-event-settings').addEventListener('click', () => this.saveEventDetails(false));
         document.getElementById('save-new-event-settings').addEventListener('click', () => this.saveEventDetails(true));
 
         // Share data
         document.getElementById('share-data').addEventListener('click', () => this.shareData());
+
+        // History icon click - show inline history
+        this.historyIcon.addEventListener('click', () => {
+            // Save current token before showing history
+            const currentToken = this.state.event.currentToken;
+            if (currentToken > 0) {
+                // Check if we need to save an empty assignment
+                const existingAssignment = this.state.assignments.find(
+                    a => a.token === currentToken && a.isLocal
+                );
+                if (!existingAssignment) {
+                    // Save empty assignment for QR mode or if no data entered
+                    this.saveAssignment('', '');
+                }
+            }
+            this.returnToGiveTokenState();
+        });
+
+        // History close button click - show options
+        this.historyCloseBtn.addEventListener('click', () => {
+            this.handleCloseHistory();
+        });
 
         // Wire up open/close buttons based on 'opens' 'closes' attributes
         document.querySelectorAll('[opens]').forEach(button => {
@@ -192,7 +244,31 @@ export class UIService {
         }
     }
 
+    disableAndFadeButton() {
+        // Disable button and start fade to gray
+        this.takeNextBtn.disabled = true;
+        this.takeNextBtn.classList.add('fading-out');
+
+        // After 0.5 seconds, start fading back
+        setTimeout(() => {
+            this.takeNextBtn.classList.remove('fading-out');
+            this.takeNextBtn.classList.add('fading-in');
+
+            // After another 0.5 seconds, re-enable button
+            setTimeout(() => {
+                this.takeNextBtn.classList.remove('fading-in');
+                this.takeNextBtn.disabled = false;
+            }, 500);
+        }, 500);
+    }
+
     handleTakeNextToken() {
+        // If showing save confirmation, advance to next token
+        if (this.showingSaveConfirmation) {
+            this.advanceToNextTokenFromConfirmation();
+            return;
+        }
+
         // If we have a current token, check for unsaved data before advancing
         if (this.state.event.currentToken > 0) {
             // Check if the current token has already been saved
@@ -215,6 +291,10 @@ export class UIService {
                         `You have unsaved athlete data for P${this.pad(this.state.event.currentToken)}. Discard and move to next token?`,
                         '⚠️',
                         () => {
+                            // Clear editing mode
+                            this.state.isEditingExisting = false;
+                            // Disable and fade button
+                            this.disableAndFadeButton();
                             // User confirmed - trigger animation directly
                             this.animateTokenChange(() => {
                                 const nextTokenNum = this.state.event.nextToken > 0 ? this.state.event.nextToken : this.state.event.currentToken + 1;
@@ -240,6 +320,10 @@ export class UIService {
                         `No athlete has been assigned to P${this.pad(this.state.event.currentToken)}. Move to next token anyway?`,
                         '⚠️',
                         () => {
+                            // Clear editing mode
+                            this.state.isEditingExisting = false;
+                            // Disable and fade button
+                            this.disableAndFadeButton();
                             // User confirmed - save empty assignment then animate
                             this.saveAssignment('', '');
                             this.animateTokenChange(() => {
@@ -260,6 +344,12 @@ export class UIService {
                     return; // Stop here, animation triggered in callback
                 }
             }
+
+            // Clear editing mode when advancing to next token
+            this.state.isEditingExisting = false;
+
+            // Disable and fade button
+            this.disableAndFadeButton();
 
             // No unsaved data - animate token change for all modes
             this.animateTokenChange(() => {
@@ -284,6 +374,9 @@ export class UIService {
 
         const val = this.state.event.nextToken > 0 ? this.state.event.nextToken : 1;
         const clampedVal = Math.min(val, 9999);
+
+        // Disable and fade button
+        this.disableAndFadeButton();
 
         // Animate from history view to new token
         this.animateFromHistory(() => {
@@ -464,6 +557,101 @@ export class UIService {
         }
     }
 
+    animateToSaveConfirmation() {
+        // Get current mode div
+        const currentMode = this.state.currentMode;
+        let currentModeDiv;
+        if (currentMode === 'qr') currentModeDiv = this.qrModeDiv;
+        else if (currentMode === 'manual') currentModeDiv = this.manualModeDiv;
+        else if (currentMode === 'scan') currentModeDiv = this.scanModeDiv;
+
+        // Slide out to the left (0.5s)
+        currentModeDiv.classList.add('sliding-out');
+
+        // After sliding out, show confirmation
+        setTimeout(() => {
+            currentModeDiv.classList.remove('sliding-out');
+            currentModeDiv.classList.add('hidden');
+
+            // Show save confirmation
+            this.showingSaveConfirmation = true;
+            this.saveConfirmationToken.textContent = `Token ${this.pad(this.state.event.currentToken)} saved`;
+            this.saveConfirmationView.classList.remove('hidden');
+
+            // Update UI to hide buttons
+            this.updateUI();
+
+            // Slide in confirmation from the right
+            this.saveConfirmationView.classList.add('sliding-in');
+
+            setTimeout(() => {
+                this.saveConfirmationView.classList.remove('sliding-in');
+            }, 500);
+        }, 500);
+    }
+
+    advanceToNextTokenFromConfirmation() {
+        // Disable and fade button
+        this.disableAndFadeButton();
+
+        // Slide out confirmation to the left
+        this.saveConfirmationView.classList.add('sliding-out');
+
+        setTimeout(() => {
+            this.saveConfirmationView.classList.remove('sliding-out');
+            this.saveConfirmationView.classList.add('hidden');
+            this.showingSaveConfirmation = false;
+
+            // Determine which mode to use for next token
+            let nextMode;
+            if (this.scannedDataBeforeEdit && !this.userEditedAfterScan) {
+                // User scanned and didn't edit - go back to scan mode
+                nextMode = 'scan';
+            } else {
+                // Stay in current mode
+                nextMode = this.state.currentMode;
+            }
+
+            // Clear scan tracking
+            this.scannedDataBeforeEdit = null;
+            this.userEditedAfterScan = false;
+
+            // Clear editing mode
+            this.state.isEditingExisting = false;
+
+            // Advance to next token
+            const nextTokenNum = this.state.event.nextToken > 0 ? this.state.event.nextToken : this.state.event.currentToken + 1;
+            this.state.event.currentToken = Math.min(nextTokenNum, 9999);
+            this.state.event.nextToken = Math.min(nextTokenNum + 1, 9999);
+            this.signalR.sendTokenUsed(this.state.event.currentToken);
+
+            // Clear athlete inputs
+            this.athleteBarcodeInput.value = '';
+            this.athleteNameInput.value = '';
+            this.scannedData = null;
+
+            // Set mode
+            this.state.currentMode = nextMode;
+            this.switchMode(nextMode);
+
+            // Update mode content
+            this.updateModeContent();
+
+            // Get the mode div for new token
+            let modeDiv;
+            if (nextMode === 'qr') modeDiv = this.qrModeDiv;
+            else if (nextMode === 'manual') modeDiv = this.manualModeDiv;
+            else if (nextMode === 'scan') modeDiv = this.scanModeDiv;
+
+            // Position new content off screen to the left and slide in
+            modeDiv.classList.add('sliding-in');
+
+            setTimeout(() => {
+                modeDiv.classList.remove('sliding-in');
+            }, 500);
+        }, 500);
+    }
+
     animateToHistory() {
         // Get current mode div
         const currentMode = this.state.currentMode;
@@ -501,6 +689,9 @@ export class UIService {
         this.barcodeService.startReadBarcode((result) => {
             if (result && result.text) {
                 this.barcodeService.stopReadBarcode();
+                // Track that we scanned data and switched to manual for confirmation
+                this.scannedDataBeforeEdit = result.text;
+                this.userEditedAfterScan = false;
                 // Switch to manual entry mode with the scanned barcode pre-filled
                 this.switchMode('manual', { athleteBarcode: result.text, athleteName: '' });
             }
@@ -511,6 +702,10 @@ export class UIService {
         if (!this.scannedData) return;
 
         const normalizedBarcode = this.normalizeAthleteBarcode(this.scannedData);
+
+        // Clear editing mode before saving
+        this.state.isEditingExisting = false;
+
         this.checkAndSaveAssignment(normalizedBarcode, '');
     }
 
@@ -526,6 +721,10 @@ export class UIService {
         }
 
         const normalizedBarcode = this.normalizeAthleteBarcode(barcode);
+
+        // Clear editing mode before saving
+        this.state.isEditingExisting = false;
+
         this.checkAndSaveAssignment(normalizedBarcode, name);
     }
 
@@ -533,7 +732,7 @@ export class UIService {
         // Skip duplicate check if barcode is empty (QR mode)
         if (!athleteBarcode) {
             this.saveAssignment(athleteBarcode, athleteName);
-            this.animateToHistory();
+            this.animateToSaveConfirmation();
             return;
         }
 
@@ -551,7 +750,7 @@ export class UIService {
                 () => {
                     // User confirmed - save anyway
                     this.saveAssignment(athleteBarcode, athleteName);
-                    this.animateToHistory();
+                    this.animateToSaveConfirmation();
                 },
                 () => {
                     // User cancelled - do nothing, stay on current screen
@@ -560,7 +759,7 @@ export class UIService {
         } else {
             // No duplicate - save immediately
             this.saveAssignment(athleteBarcode, athleteName);
-            this.animateToHistory();
+            this.animateToSaveConfirmation();
         }
     }
 
@@ -638,6 +837,76 @@ export class UIService {
         }, 100);
     }
 
+    handleCloseHistory() {
+        // Find the most recent local assignment (the last token this user created)
+        const localAssignments = this.state.assignments
+            .filter(a => a.isLocal)
+            .sort((a, b) => b.token - a.token);
+
+        const mostRecentToken = localAssignments.length > 0 ? localAssignments[0].token : null;
+
+        if (mostRecentToken) {
+            // Show options: resume last token or create next token
+            const modalElements = {
+                modal: document.getElementById('modal'),
+                text: document.getElementById('confirm-text'),
+                icon: document.getElementById('confirm-icon'),
+                confirmBtn: document.getElementById('confirm-button-1'),
+                cancelBtn: document.getElementById('confirm-button-2'),
+            };
+
+            modalElements.text.textContent = `Resume P${this.pad(mostRecentToken)} or create next token?`;
+            modalElements.icon.textContent = '❔';
+            modalElements.confirmBtn.textContent = `Resume P${this.pad(mostRecentToken)}`;
+            modalElements.cancelBtn.textContent = 'Next token';
+            modalElements.modal.classList.remove('hidden');
+
+            const resumeClick = () => {
+                modalElements.confirmBtn.removeEventListener('click', resumeClick);
+                modalElements.cancelBtn.removeEventListener('click', nextClick);
+                modalElements.confirmBtn.textContent = 'Yes';
+                modalElements.cancelBtn.textContent = 'Cancel';
+                modalElements.modal.classList.add('hidden');
+
+                // Resume the most recent token
+                this.editHistoryToken(mostRecentToken);
+            };
+
+            const nextClick = () => {
+                modalElements.confirmBtn.removeEventListener('click', resumeClick);
+                modalElements.cancelBtn.removeEventListener('click', nextClick);
+                modalElements.confirmBtn.textContent = 'Yes';
+                modalElements.cancelBtn.textContent = 'Cancel';
+                modalElements.modal.classList.add('hidden');
+
+                // Create next token
+                this.handleTakeNextToken();
+            };
+
+            modalElements.confirmBtn.addEventListener('click', resumeClick);
+            modalElements.cancelBtn.addEventListener('click', nextClick);
+        } else {
+            // No assignments yet - just take next token
+            this.handleTakeNextToken();
+        }
+    }
+
+    handleDeleteAthleteData() {
+        this.confirm(
+            `Delete athlete data from P${this.pad(this.state.event.currentToken)}?`,
+            '🗑️',
+            () => {
+                // User confirmed - clear athlete data from the assignment
+                this.saveAssignment('', '');
+                // Return to history view
+                this.animateToHistory();
+            },
+            () => {
+                // User cancelled - do nothing
+            }
+        );
+    }
+
     returnToGiveTokenState() {
         this.state.event.currentToken = 0;
         this.state.currentMode = null;
@@ -665,12 +934,14 @@ export class UIService {
                 : assignment.athleteBarcode || '[Empty]';
 
             const remoteClass = assignment.isLocal ? '' : 'remote';
+            const createdByLabel = assignment.isLocal ? '<div class="history-created-by">Created by you</div>' : '';
 
             return `
                 <div class="history-item ${remoteClass}" data-token="${assignment.token}">
                     <div class="history-info">
                         <div class="history-token">${tokenLabel}</div>
                         <div class="history-athlete">${athleteInfo}</div>
+                        ${createdByLabel}
                     </div>
                     <svg class="history-edit-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
                         <path d="M421.7 220.3L188.5 453.4L154.6 419.5L158.1 416H112C103.2 416 96 408.8 96 400V353.9L92.51 357.4C87.78 362.2 84.31 368 82.42 374.4L59.44 452.6C56.46 463.1 61.86 474.5 72.33 477.5C73.94 477.1 75.58 478.2 77.2 478.2C84.66 478.2 91.76 474.3 95.62 467.4L137.2 390.5L84.84 338.2C70.28 323.6 70.28 299.9 84.84 285.3L314.1 56.08C328.7 41.51 352.4 41.51 366.1 56.08L456.9 146.9C471.5 161.5 471.5 185.2 456.9 199.7L421.7 220.3zM492.7 58.75C519.8 85.88 519.8 129.1 492.7 156.1L411.7 237.1L274.9 100.3L355.9 19.27C382.1-7.85 426.1-7.85 453.3 19.27L492.7 58.75z"/>
@@ -693,10 +964,12 @@ export class UIService {
 
         if (count === 0) {
             this.historyIcon.classList.add('hidden');
+            this.historyBadge.classList.add('hidden');
             return;
         }
 
         this.historyIcon.classList.remove('hidden');
+        this.historyBadge.classList.remove('hidden');
         this.historyBadge.textContent = count;
     }
 
@@ -718,11 +991,14 @@ export class UIService {
                 ? `${assignment.athleteBarcode} (${assignment.athleteName})`
                 : assignment.athleteBarcode || '[Empty]';
 
+            const createdByLabel = assignment.isLocal ? '<div class="history-created-by">Created by you</div>' : '';
+
             return `
                 <div class="history-item" data-token="${assignment.token}">
                     <div class="history-info">
                         <div class="history-token">${tokenLabel}</div>
                         <div class="history-athlete">${athleteInfo}</div>
+                        ${createdByLabel}
                     </div>
                     <svg class="history-edit-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
                         <path d="M421.7 220.3L188.5 453.4L154.6 419.5L158.1 416H112C103.2 416 96 408.8 96 400V353.9L92.51 357.4C87.78 362.2 84.31 368 82.42 374.4L59.44 452.6C56.46 463.1 61.86 474.5 72.33 477.5C73.94 477.1 75.58 478.2 77.2 478.2C84.66 478.2 91.76 474.3 95.62 467.4L137.2 390.5L84.84 338.2C70.28 323.6 70.28 299.9 84.84 285.3L314.1 56.08C328.7 41.51 352.4 41.51 366.1 56.08L456.9 146.9C471.5 161.5 471.5 185.2 456.9 199.7L421.7 220.3zM492.7 58.75C519.8 85.88 519.8 129.1 492.7 156.1L411.7 237.1L274.9 100.3L355.9 19.27C382.1-7.85 426.1-7.85 453.3 19.27L492.7 58.75z"/>
@@ -774,15 +1050,39 @@ export class UIService {
     updateUI() {
         const hasCurrentToken = this.state.event.currentToken > 0;
 
+        // If showing save confirmation, hide all buttons and disable mode selection
+        if (this.showingSaveConfirmation) {
+            this.editCancelBtn.classList.add('hidden');
+            this.editDeleteBtn.classList.add('hidden');
+            this.historyIcon.classList.add('hidden');
+            this.historyBadge.classList.add('hidden');
+            this.historyCloseBtn.classList.add('hidden');
+            this.takeNextBtn.style.display = 'flex';
+            this.takeNextBtn.textContent = 'Next token';
+
+            // Disable mode selection buttons
+            this.modeScanBtn.disabled = true;
+            this.modeManualBtn.disabled = true;
+            this.modeQrBtn.disabled = true;
+            return;
+        }
+
+        // Re-enable mode selection buttons if not in save confirmation
+        this.modeScanBtn.disabled = false;
+        this.modeManualBtn.disabled = false;
+        this.modeQrBtn.disabled = false;
+
         if (hasCurrentToken) {
             // Show mode selection and content area
             this.modeSelection.classList.remove('hidden');
             this.contentArea.classList.remove('hidden');
             this.historyViewDiv.classList.add('hidden'); // Hide history view when working with a token
 
-            // Show history button in top right when working with a token
+            // Show history button with badge, hide close button
+            this.historyCloseBtn.classList.add('hidden');
             if (this.state.assignments.length > 0) {
                 this.historyIcon.classList.remove('hidden');
+                this.historyBadge.classList.remove('hidden');
             }
 
             // Only update label if not transitioning
@@ -796,31 +1096,47 @@ export class UIService {
             if (this.state.isEditingExisting) {
                 this.editCancelBtn.classList.remove('hidden');
                 this.codeLabel.classList.add('editing');
+
+                // Show delete button only if assignment has athlete data
+                const currentTokenAssignment = this.state.assignments.find(
+                    a => a.token === this.state.event.currentToken
+                );
+                if (currentTokenAssignment && currentTokenAssignment.athleteBarcode) {
+                    this.editDeleteBtn.classList.remove('hidden');
+                } else {
+                    this.editDeleteBtn.classList.add('hidden');
+                }
+
                 this.takeNextBtn.style.display = 'flex';
                 this.takeNextBtn.textContent = 'Next token';
             }
             // Not editing - show "Next token" button for all modes
             else {
                 this.editCancelBtn.classList.add('hidden');
+                this.editDeleteBtn.classList.add('hidden');
                 this.codeLabel.classList.remove('editing');
                 this.takeNextBtn.style.display = 'flex';
                 this.takeNextBtn.textContent = 'Next token';
             }
         } else {
-            // No current token - show history view with "Next token" button
+            // No current token - show history view
             this.editCancelBtn.classList.add('hidden');
+            this.editDeleteBtn.classList.add('hidden');
             this.codeLabel.classList.remove('editing');
             this.modeSelection.classList.add('hidden');
             this.scanModeDiv.classList.add('hidden');
             this.manualModeDiv.classList.add('hidden');
             this.qrModeDiv.classList.add('hidden');
-            this.codeLabel.classList.add('hide');
-            this.nocodeLabel.classList.remove('hide');
-            this.takeNextBtn.style.display = 'flex';
-            this.takeNextBtn.textContent = 'Next token';
 
-            // Hide the history button when showing inline history (redundant)
+            // Show "History" in the code label area
+            this.codeLabel.textContent = 'History';
+            this.codeLabel.classList.remove('hide');
+            this.nocodeLabel.classList.add('hide');
+
+            // Hide the history button (with badge), show close button only
             this.historyIcon.classList.add('hidden');
+            this.historyBadge.classList.add('hidden');
+            this.historyCloseBtn.classList.remove('hidden');
 
             // Show history view in the content area
             this.contentArea.classList.remove('hidden');
