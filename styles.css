@@ -472,7 +472,7 @@ aside.open {
 .save-button {
     background: #2e2966;
     color: white;
-    width: 70vw;
+    width: 80vw;
 
     &:active {
         background: #f41c5e;
@@ -529,14 +529,16 @@ aside.open {
     background: white;
     border: 2px solid #ddd;
     border-radius: 0.5rem;
-    margin: 0.5rem 0;
-    padding: 0.75rem 1rem;
+    margin: 0.1rem 0;
+    padding: 0.75rem 0.5rem;
     cursor: pointer;
     transition: all 0.2s ease;
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
+    width: 100%;
+    box-sizing: border-box;
 
     &:active {
         background: #2e2966;
@@ -624,6 +626,29 @@ aside.open {
         fill: white;
         opacity: 1;
     }
+}
+
+/* Inline history view */
+#history-view {
+    padding: 1rem;
+    overflow-y: auto;
+    max-height: 50vh;
+    width: 90%;
+    margin: 0 auto;
+
+    h3 {
+        margin: 0 0 1rem 0;
+        font-size: calc(var(--default-font-size) * 1.0);
+        color: #2e2966;
+        font-weight: 700;
+    }
+}
+
+#history-view-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    width: 100%;
 }
 
 /* Environment selection modal */
@@ -768,11 +793,28 @@ aside.open {
     }
 }
 
+/* Legacy QR-specific animations - no longer used, kept for compatibility */
 #qr.sliding-out {
     animation: qrSlideOut 0.5s ease-in-out forwards;
 }
 
 #qr.sliding-in {
+    animation: qrSlideIn 0.5s ease-in-out forwards;
+    transform: translateX(-100vw);
+}
+
+/* Sliding animations for all mode containers and history view */
+#qr-mode.sliding-out,
+#manual-mode.sliding-out,
+#scan-mode.sliding-out,
+#history-view.sliding-out {
+    animation: qrSlideOut 0.5s ease-in-out forwards;
+}
+
+#qr-mode.sliding-in,
+#manual-mode.sliding-in,
+#scan-mode.sliding-in,
+#history-view.sliding-in {
     animation: qrSlideIn 0.5s ease-in-out forwards;
     transform: translateX(-100vw);
 }

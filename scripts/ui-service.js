@@ -5,7 +5,8 @@ export class UIService {
         this.state = state;
         this.signalR = signalRService;
         this.barcodeService = barcodeService;
-        this.isQrTransitioning = false;
+        this.isTokenTransitioning = false; // Track if we're animating a token change
+        this.lastRenderedToken = null; // Track last rendered token to avoid unnecessary animations
 
         // Get DOM elements
         this.positionInput = document.getElementById('position');
@@ -27,6 +28,9 @@ export class UIService {
         this.scanModeDiv = document.getElementById('scan-mode');
         this.manualModeDiv = document.getElementById('manual-mode');
         this.qrModeDiv = document.getElementById('qr-mode');
+        this.historyViewDiv = document.getElementById('history-view');
+        this.historyViewList = document.getElementById('history-view-list');
+        this.historyViewEmpty = document.getElementById('history-view-empty');
 
         // Mode buttons
         this.modeScanBtn = document.getElementById('mode-scan');
@@ -135,6 +139,7 @@ export class UIService {
         this.watch(() => JSON.stringify(this.state.assignments), () => {
             this.renderHistory();
             this.renderHistorySummary();
+            this.renderInlineHistory();
         });
         this.watch(() => this.state.connectionId, () => {
             this.updateEventQR();
@@ -188,46 +193,124 @@ export class UIService {
     }
 
     handleTakeNextToken() {
+        // If we have a current token, check for unsaved data before advancing
+        if (this.state.event.currentToken > 0) {
+            // Check if the current token has already been saved
+            const currentTokenAssignment = this.state.assignments.find(
+                a => a.token === this.state.event.currentToken && a.isLocal
+            );
+
+            // Check if in manual or scan mode
+            if (this.state.currentMode === 'manual' || this.state.currentMode === 'scan') {
+                const barcode = this.athleteBarcodeInput.value.trim();
+                const name = this.athleteNameInput.value.trim();
+                const hasScannedData = this.scannedData ? true : false;
+
+                // Check if assignment has actual athlete data
+                const hasAthleteInAssignment = currentTokenAssignment && currentTokenAssignment.athleteBarcode;
+
+                // Check if there's entered/scanned data and it hasn't been saved yet
+                if ((barcode || name || hasScannedData) && !hasAthleteInAssignment) {
+                    this.confirm(
+                        `You have unsaved athlete data for P${this.pad(this.state.event.currentToken)}. Discard and move to next token?`,
+                        '⚠️',
+                        () => {
+                            // User confirmed - trigger animation directly
+                            this.animateTokenChange(() => {
+                                const nextTokenNum = this.state.event.nextToken > 0 ? this.state.event.nextToken : this.state.event.currentToken + 1;
+                                this.state.event.currentToken = Math.min(nextTokenNum, 9999);
+                                this.state.event.nextToken = Math.min(nextTokenNum + 1, 9999);
+                                this.signalR.sendTokenUsed(this.state.event.currentToken);
+                                this.athleteBarcodeInput.value = '';
+                                this.athleteNameInput.value = '';
+                                this.scannedData = null;
+                                this.updateModeContent();
+                            });
+                        },
+                        () => {
+                            // User cancelled - stay on current screen
+                        }
+                    );
+                    return; // Stop here, animation triggered in callback
+                }
+
+                // Check if there's NO athlete entered at all and no saved athlete data
+                if (!barcode && !name && !hasScannedData && !hasAthleteInAssignment) {
+                    this.confirm(
+                        `No athlete has been assigned to P${this.pad(this.state.event.currentToken)}. Move to next token anyway?`,
+                        '⚠️',
+                        () => {
+                            // User confirmed - save empty assignment then animate
+                            this.saveAssignment('', '');
+                            this.animateTokenChange(() => {
+                                const nextTokenNum = this.state.event.nextToken > 0 ? this.state.event.nextToken : this.state.event.currentToken + 1;
+                                this.state.event.currentToken = Math.min(nextTokenNum, 9999);
+                                this.state.event.nextToken = Math.min(nextTokenNum + 1, 9999);
+                                this.signalR.sendTokenUsed(this.state.event.currentToken);
+                                this.athleteBarcodeInput.value = '';
+                                this.athleteNameInput.value = '';
+                                this.scannedData = null;
+                                this.updateModeContent();
+                            });
+                        },
+                        () => {
+                            // User cancelled - stay on current screen
+                        }
+                    );
+                    return; // Stop here, animation triggered in callback
+                }
+            }
+
+            // No unsaved data - animate token change for all modes
+            this.animateTokenChange(() => {
+                const nextTokenNum = this.state.event.nextToken > 0 ? this.state.event.nextToken : this.state.event.currentToken + 1;
+                this.state.event.currentToken = Math.min(nextTokenNum, 9999);
+                this.state.event.nextToken = Math.min(nextTokenNum + 1, 9999);
+                console.log(`Advanced to token: P${this.pad(this.state.event.currentToken)}`);
+                this.signalR.sendTokenUsed(this.state.event.currentToken);
+                this.athleteBarcodeInput.value = '';
+                this.athleteNameInput.value = '';
+                this.scannedData = null;
+                this.updateModeContent();
+            });
+            return;
+        }
+
         // If editing an existing token, cancel just returns to give token state
         if (this.state.isEditingExisting) {
             this.returnToGiveTokenState();
             return;
         }
 
-        // If we already have a current token and NOT in QR mode, this is a "Cancel" action
-        if (this.state.event.currentToken > 0 && this.state.currentMode !== 'qr') {
-            this.returnToGiveTokenState();
-            return;
-        }
-
-        // If in QR mode with a current token, advance to next token
-        if (this.state.event.currentToken > 0 && this.state.currentMode === 'qr') {
-            this.returnToGiveTokenState();
-            // Immediately take the next token
-            setTimeout(() => this.handleTakeNextToken(), 0);
-            return;
-        }
-
         const val = this.state.event.nextToken > 0 ? this.state.event.nextToken : 1;
         const clampedVal = Math.min(val, 9999);
 
-        this.state.event.currentToken = clampedVal;
-        this.state.isEditingExisting = false;
-        console.log(`Taking next token: P${this.pad(clampedVal)}`);
-        this.signalR.sendTokenUsed(clampedVal);
+        // Animate from history view to new token
+        this.animateFromHistory(() => {
+            this.state.event.currentToken = clampedVal;
+            this.state.isEditingExisting = false;
+            console.log(`Taking next token: P${this.pad(clampedVal)}`);
+            this.signalR.sendTokenUsed(clampedVal);
 
-        // Set mode to preferred or default to qr
-        const mode = this.state.preferredMode || 'qr';
-        this.state.currentMode = mode;
-        this.switchMode(mode);
+            // Clear athlete inputs for fresh start
+            this.athleteBarcodeInput.value = '';
+            this.athleteNameInput.value = '';
+            this.scannedData = null;
 
-        // If QR mode, save the assignment immediately (with empty athlete data)
-        if (mode === 'qr') {
-            this.saveAssignment('', '');
-        }
+            // Set mode to preferred or default to qr
+            const mode = this.state.preferredMode || 'qr';
+            this.state.currentMode = mode;
+            this.switchMode(mode);
+
+            // If QR mode, save the assignment immediately (with empty athlete data)
+            if (mode === 'qr') {
+                this.saveAssignment('', '');
+            }
+        });
     }
 
     switchMode(mode, prefillData = null) {
+        const previousMode = this.state.currentMode;
         this.state.currentMode = mode;
         this.state.preferredMode = mode;
 
@@ -257,19 +340,17 @@ export class UIService {
                 this.modeManualBtn.classList.add('active');
                 this.manualModeDiv.classList.remove('hidden');
 
-                // Pre-fill if data provided, otherwise clear
+                // Pre-fill if data provided, otherwise preserve existing values
                 if (prefillData) {
                     this.athleteBarcodeInput.value = prefillData.athleteBarcode || '';
                     this.athleteNameInput.value = prefillData.athleteName || '';
-                } else {
-                    this.athleteBarcodeInput.value = '';
-                    this.athleteNameInput.value = '';
                 }
+                // If no prefillData, keep existing values (don't clear)
                 this.athleteBarcodeInput.focus();
             } else if (mode === 'qr') {
                 this.modeQrBtn.classList.add('active');
                 this.qrModeDiv.classList.remove('hidden');
-                // Defer QR rendering until after the element is visible
+                // Render QR code (no animation in switchMode - animations handled by animateTokenChange)
                 requestAnimationFrame(() => {
                     this.renderPositionQR();
                 });
@@ -280,13 +361,148 @@ export class UIService {
         });
     }
 
+    animateTokenChange(callback) {
+        // Get current mode div
+        const currentMode = this.state.currentMode;
+        let currentModeDiv;
+        if (currentMode === 'qr') currentModeDiv = this.qrModeDiv;
+        else if (currentMode === 'manual') currentModeDiv = this.manualModeDiv;
+        else if (currentMode === 'scan') currentModeDiv = this.scanModeDiv;
+
+        // Set transitioning flag and show loading spinner in header
+        this.isTokenTransitioning = true;
+        this.codeLabel.innerHTML = '<span class="spinner">⏳</span>';
+
+        // Slide out to the right (0.5s)
+        currentModeDiv.classList.add('sliding-out');
+
+        // After sliding out, content is off screen - update it
+        setTimeout(() => {
+            currentModeDiv.classList.remove('sliding-out');
+
+            // Execute the callback to update token and content
+            if (callback) callback();
+
+            // Get the new mode div (might have changed modes)
+            const newMode = this.state.currentMode;
+            let newModeDiv;
+            if (newMode === 'qr') newModeDiv = this.qrModeDiv;
+            else if (newMode === 'manual') newModeDiv = this.manualModeDiv;
+            else if (newMode === 'scan') newModeDiv = this.scanModeDiv;
+
+            // Position new content off screen to the left
+            newModeDiv.classList.add('sliding-in');
+
+            // Slide in from the left (0.5s)
+            setTimeout(() => {
+                newModeDiv.classList.remove('sliding-in');
+                this.isTokenTransitioning = false;
+
+                // Update header with new token number
+                this.codeLabel.textContent = `P${this.pad(this.state.event.currentToken)}`;
+            }, 500);
+        }, 500);
+    }
+
+    animateFromHistory(callback) {
+        // Set transitioning flag and show loading spinner in header
+        this.isTokenTransitioning = true;
+        this.codeLabel.innerHTML = '<span class="spinner">⏳</span>';
+        this.codeLabel.classList.remove('hide');
+        this.nocodeLabel.classList.add('hide');
+
+        // Slide out history view to the right (0.5s)
+        this.historyViewDiv.classList.add('sliding-out');
+
+        // After sliding out, content is off screen - update it
+        setTimeout(() => {
+            this.historyViewDiv.classList.remove('sliding-out');
+            this.historyViewDiv.classList.add('hidden');
+
+            // Execute the callback to update token and content
+            if (callback) callback();
+
+            // Update UI to show mode selection and content
+            this.updateUI();
+
+            // Get the mode div for new token
+            const mode = this.state.currentMode;
+            let modeDiv;
+            if (mode === 'qr') modeDiv = this.qrModeDiv;
+            else if (mode === 'manual') modeDiv = this.manualModeDiv;
+            else if (mode === 'scan') modeDiv = this.scanModeDiv;
+
+            // Position new content off screen to the left
+            modeDiv.classList.add('sliding-in');
+
+            // Slide in from the left (0.5s)
+            setTimeout(() => {
+                modeDiv.classList.remove('sliding-in');
+                this.isTokenTransitioning = false;
+
+                // Update header with new token number
+                this.codeLabel.textContent = `P${this.pad(this.state.event.currentToken)}`;
+            }, 500);
+        }, 500);
+    }
+
+    updateModeContent() {
+        // Update content based on current mode
+        const mode = this.state.currentMode;
+        if (mode === 'qr') {
+            // Regenerate QR code with new token
+            this.renderQR(this.qrDiv, `P${this.pad(this.state.event.currentToken)}`);
+            // Save empty assignment for QR mode
+            this.saveAssignment('', '');
+        } else if (mode === 'manual') {
+            // Form is already cleared by caller
+        } else if (mode === 'scan') {
+            // Reset scanning
+            this.barcodeService.stopReadBarcode();
+            this.scanConfirmation.classList.add('hidden');
+            this.startScanning();
+        }
+    }
+
+    animateToHistory() {
+        // Get current mode div
+        const currentMode = this.state.currentMode;
+        let currentModeDiv;
+        if (currentMode === 'qr') currentModeDiv = this.qrModeDiv;
+        else if (currentMode === 'manual') currentModeDiv = this.manualModeDiv;
+        else if (currentMode === 'scan') currentModeDiv = this.scanModeDiv;
+
+        // Slide out to the right (0.5s)
+        currentModeDiv.classList.add('sliding-out');
+
+        // After sliding out, show history
+        setTimeout(() => {
+            currentModeDiv.classList.remove('sliding-out');
+
+            // Clear token state and show history
+            this.state.event.currentToken = 0;
+            this.state.currentMode = null;
+            this.state.isEditingExisting = false;
+            this.barcodeService.stopReadBarcode();
+
+            // Update UI will show history view
+            this.updateUI();
+
+            // Slide in history from the left
+            this.historyViewDiv.classList.add('sliding-in');
+
+            setTimeout(() => {
+                this.historyViewDiv.classList.remove('sliding-in');
+            }, 500);
+        }, 500);
+    }
+
     startScanning() {
         this.barcodeService.startReadBarcode((result) => {
             if (result && result.text) {
-                this.scannedData = result.text;
-                this.scannedBarcodeSpan.textContent = result.text;
-                this.scanConfirmation.classList.remove('hidden');
                 this.barcodeService.stopReadBarcode();
+                // Switch to manual entry mode with the scanned barcode pre-filled
+                this.switchMode('manual', { athleteBarcode: result.text, athleteName: '' });
             }
         });
     }
@@ -302,8 +518,10 @@ export class UIService {
         const barcode = this.athleteBarcodeInput.value.trim();
         const name = this.athleteNameInput.value.trim();
 
-        if (!barcode) {
-            this.alert('Athlete barcode is required', '❌');
+        // Validate barcode format
+        const validation = this.validateAthleteBarcode(barcode);
+        if (!validation.valid) {
+            this.alert(validation.error, '❌');
             return;
         }
 
@@ -315,7 +533,7 @@ export class UIService {
         // Skip duplicate check if barcode is empty (QR mode)
         if (!athleteBarcode) {
             this.saveAssignment(athleteBarcode, athleteName);
-            this.returnToGiveTokenState();
+            this.animateToHistory();
             return;
         }
 
@@ -333,7 +551,7 @@ export class UIService {
                 () => {
                     // User confirmed - save anyway
                     this.saveAssignment(athleteBarcode, athleteName);
-                    this.returnToGiveTokenState();
+                    this.animateToHistory();
                 },
                 () => {
                     // User cancelled - do nothing, stay on current screen
@@ -342,8 +560,26 @@ export class UIService {
         } else {
             // No duplicate - save immediately
             this.saveAssignment(athleteBarcode, athleteName);
-            this.returnToGiveTokenState();
+            this.animateToHistory();
         }
+    }
+
+    validateAthleteBarcode(barcode) {
+        if (!barcode) return { valid: false, error: 'Barcode is required' };
+
+        // Remove whitespace
+        barcode = barcode.trim();
+
+        // Check format: optional A/a followed by 1-9 digits
+        const regex = /^[Aa]?\d{1,9}$/;
+        if (!regex.test(barcode)) {
+            return {
+                valid: false,
+                error: 'Invalid barcode format. Must be A# (e.g., A1234567) where A is optional and # is 1-9 digits'
+            };
+        }
+
+        return { valid: true };
     }
 
     normalizeAthleteBarcode(barcode) {
@@ -364,8 +600,8 @@ export class UIService {
         // Convert to number and back to string to remove leading zeros
         const number = parseInt(numericPart, 10);
         if (isNaN(number) || number < 1) {
-            // Invalid barcode
-            return barcode; // Return original if can't normalize
+            // Invalid barcode - return empty string
+            return '';
         }
 
         // Format as A + number (no leading zeros)
@@ -406,6 +642,7 @@ export class UIService {
         this.state.event.currentToken = 0;
         this.state.currentMode = null;
         this.state.isEditingExisting = false;
+        this.lastRenderedToken = null; // Reset for next token animation
         this.barcodeService.stopReadBarcode();
         this.updateUI();
     }
@@ -463,6 +700,46 @@ export class UIService {
         this.historyBadge.textContent = count;
     }
 
+    renderInlineHistory() {
+        // Show all assignments (everyone's tokens)
+        // Sort by token number (descending - highest first)
+        const sorted = [...this.state.assignments].sort((a, b) => b.token - a.token);
+
+        if (sorted.length === 0) {
+            this.historyViewEmpty.classList.remove('hidden');
+            this.historyViewList.innerHTML = '';
+            return;
+        }
+
+        this.historyViewEmpty.classList.add('hidden');
+        this.historyViewList.innerHTML = sorted.map(assignment => {
+            const tokenLabel = `P${this.pad(assignment.token)}`;
+            const athleteInfo = assignment.athleteName
+                ? `${assignment.athleteBarcode} (${assignment.athleteName})`
+                : assignment.athleteBarcode || '[Empty]';
+
+            return `
+                <div class="history-item" data-token="${assignment.token}">
+                    <div class="history-info">
+                        <div class="history-token">${tokenLabel}</div>
+                        <div class="history-athlete">${athleteInfo}</div>
+                    </div>
+                    <svg class="history-edit-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path d="M421.7 220.3L188.5 453.4L154.6 419.5L158.1 416H112C103.2 416 96 408.8 96 400V353.9L92.51 357.4C87.78 362.2 84.31 368 82.42 374.4L59.44 452.6C56.46 463.1 61.86 474.5 72.33 477.5C73.94 477.1 75.58 478.2 77.2 478.2C84.66 478.2 91.76 474.3 95.62 467.4L137.2 390.5L84.84 338.2C70.28 323.6 70.28 299.9 84.84 285.3L314.1 56.08C328.7 41.51 352.4 41.51 366.1 56.08L456.9 146.9C471.5 161.5 471.5 185.2 456.9 199.7L421.7 220.3zM492.7 58.75C519.8 85.88 519.8 129.1 492.7 156.1L411.7 237.1L274.9 100.3L355.9 19.27C382.1-7.85 426.1-7.85 453.3 19.27L492.7 58.75z"/>
+                    </svg>
+                </div>
+            `;
+        }).join('');
+
+        // Add click handlers to history items
+        this.historyViewList.querySelectorAll('.history-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const token = parseInt(item.getAttribute('data-token'));
+                this.editHistoryToken(token);
+            });
+        });
+    }
+
     editHistoryToken(token) {
         // Close the history menu
         document.getElementById('history-menu').classList.remove('open');
@@ -501,9 +778,15 @@ export class UIService {
             // Show mode selection and content area
             this.modeSelection.classList.remove('hidden');
             this.contentArea.classList.remove('hidden');
+            this.historyViewDiv.classList.add('hidden'); // Hide history view when working with a token
+
+            // Show history button in top right when working with a token
+            if (this.state.assignments.length > 0) {
+                this.historyIcon.classList.remove('hidden');
+            }
 
             // Only update label if not transitioning
-            if (!this.isQrTransitioning) {
+            if (!this.isTokenTransitioning) {
                 this.codeLabel.textContent = `P${this.pad(this.state.event.currentToken)}`;
             }
             this.codeLabel.classList.remove('hide');
@@ -513,89 +796,54 @@ export class UIService {
             if (this.state.isEditingExisting) {
                 this.editCancelBtn.classList.remove('hidden');
                 this.codeLabel.classList.add('editing');
-
-                // In QR mode when editing, show next token button
-                if (this.state.currentMode === 'qr') {
-                    const nextToken = this.state.event.nextToken;
-                    if (nextToken === 0) {
-                        this.takeNextBtn.textContent = 'Give next token';
-                    } else {
-                        this.takeNextBtn.textContent = `Give token P${this.pad(nextToken)}`;
-                    }
-                } else {
-                    // Hide the main button in scan/manual modes when editing
-                    this.takeNextBtn.style.display = 'none';
-                }
-            }
-            // In QR mode (new token), show "Give token P####" for next token
-            else if (this.state.currentMode === 'qr') {
-                this.editCancelBtn.classList.add('hidden');
-                this.codeLabel.classList.remove('editing');
                 this.takeNextBtn.style.display = 'flex';
-                const nextToken = this.state.event.nextToken;
-                if (nextToken === 0) {
-                    this.takeNextBtn.textContent = 'Give next token';
-                } else {
-                    this.takeNextBtn.textContent = `Give token P${this.pad(nextToken)}`;
-                }
+                this.takeNextBtn.textContent = 'Next token';
             }
-            // In other modes (new token), hide the main button
+            // Not editing - show "Next token" button for all modes
             else {
                 this.editCancelBtn.classList.add('hidden');
                 this.codeLabel.classList.remove('editing');
-                this.takeNextBtn.style.display = 'none';
+                this.takeNextBtn.style.display = 'flex';
+                this.takeNextBtn.textContent = 'Next token';
             }
         } else {
-            // Show "Give token" button
+            // No current token - show history view with "Next token" button
             this.editCancelBtn.classList.add('hidden');
             this.codeLabel.classList.remove('editing');
             this.modeSelection.classList.add('hidden');
-            this.contentArea.classList.add('hidden');
             this.scanModeDiv.classList.add('hidden');
             this.manualModeDiv.classList.add('hidden');
             this.qrModeDiv.classList.add('hidden');
             this.codeLabel.classList.add('hide');
             this.nocodeLabel.classList.remove('hide');
             this.takeNextBtn.style.display = 'flex';
+            this.takeNextBtn.textContent = 'Next token';
+
+            // Hide the history button when showing inline history (redundant)
+            this.historyIcon.classList.add('hidden');
+
+            // Show history view in the content area
+            this.contentArea.classList.remove('hidden');
+            this.historyViewDiv.classList.remove('hidden');
+            this.renderInlineHistory();
 
             const nextToken = this.state.event.nextToken;
             if (nextToken === 0) {
-                this.takeNextBtn.textContent = 'Give next token';
                 this.positionInput.placeholder = '';
             } else {
-                this.takeNextBtn.textContent = `Give token P${this.pad(nextToken)}`;
                 this.positionInput.placeholder = nextToken;
             }
         }
     }
 
     renderPositionQR() {
-        const qrText = `P${this.pad(this.state.event.currentToken)}`;
+        const currentToken = this.state.event.currentToken;
+        const qrText = `P${this.pad(currentToken)}`;
 
-        // If QR already exists, animate the transition
+        // Simply render the QR code (animations handled by animateTokenChange)
         if (this.qrDiv.children.length > 0) {
-            // Set transitioning flag and show loading spinner in header
-            this.isQrTransitioning = true;
-            this.codeLabel.innerHTML = '<span class="spinner">⏳</span>';
-
-            // Slide out to the right (0.5s)
-            this.qrDiv.classList.add('sliding-out');
-
-            // After sliding out, change content and slide in from left
-            setTimeout(() => {
-                this.qrDiv.classList.remove('sliding-out');
-                this.qrDiv.classList.add('sliding-in');
-
-                // Render new QR code
-                this.renderQR(this.qrDiv, qrText);
-
-                // After slide-in completes, update header and clear flag
-                setTimeout(() => {
-                    this.qrDiv.classList.remove('sliding-in');
-                    this.isQrTransitioning = false;
-                    this.codeLabel.textContent = `P${this.pad(this.state.event.currentToken)}`;
-                }, 500);
-            }, 500);
+            // QR exists - just update it
+            this.renderQR(this.qrDiv, qrText);
         } else {
             // First render - fade in smoothly
             this.qrDiv.style.opacity = '0';
@@ -605,6 +853,9 @@ export class UIService {
                 this.qrDiv.style.opacity = '1';
             });
         }
+
+        // Update last rendered token
+        this.lastRenderedToken = currentToken;
     }
 
     updateEventQR() {
