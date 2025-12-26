@@ -29,7 +29,8 @@
       />
 
       <!-- Individual Token View -->
-      <div v-if="showContentArea" class="token-detail-view">
+      <Transition name="token-detail">
+        <div v-if="showContentArea" class="token-detail-view">
         <!-- Mode selection -->
         <div id="mode-selection" class="mode-selection">
           <button @click="switchMode('qr')" class="mode-button" data-mode="qr" title="Show QR code">
@@ -62,7 +63,8 @@
         <div class="controls">
           <button @click="closeTokenDetail" class="done-button">Done</button>
         </div>
-      </div>
+        </div>
+      </Transition>
     </main>
 
     <!-- Sidebars and Modals -->
@@ -184,13 +186,14 @@ const handleTokenClick = (token) => {
     // Edit existing assignment
     store.event.currentToken = token
     store.isEditingExisting = true
-    store.currentMode = 'manual'
+    // Default to last used mode or 'qr'
+    store.currentMode = store.preferredMode || 'qr'
   } else {
     // Create new assignment for this token
     store.event.currentToken = token
     store.isEditingExisting = false
-    // Start with no mode selected - user must choose
-    store.currentMode = null
+    // Default to last used mode or 'qr'
+    store.currentMode = store.preferredMode || 'qr'
   }
 }
 

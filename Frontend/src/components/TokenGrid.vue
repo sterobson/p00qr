@@ -45,7 +45,7 @@ const getTokenClass = (token) => {
   const maxAssignedToken = store.assignments.length > 0
     ? Math.max(...store.assignments.map(a => a.token))
     : 0
-  const isPast = token < maxAssignedToken
+  const isPast = token <= maxAssignedToken
 
   return {
     'has-assignment': !!assignment,
