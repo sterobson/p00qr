@@ -193,11 +193,35 @@ export class UIService {
             document.getElementById('event-name-input').value = newValue;
         });
         this.watch(() => this.state.event.currentToken, () => this.updateUI());
-        this.watch(() => this.state.event.nextToken, () => {
+        this.watch(() => this.state.event.nextToken, (newNextToken) => {
             this.updateUI();
             this.updateGridItemUsedStatus();
+
             // Scroll to the new next token if we're in grid view
             if (this.state.event.currentToken === 0 && !this.tokenGridContainer.classList.contains('hidden')) {
+                // Check if we need to render more tokens to show nextToken
+                if (newNextToken && newNextToken > this.maxTokenToRender) {
+                    // Render tokens up to nextToken + 20
+                    const targetMax = Math.min(newNextToken + 20, 9999);
+                    for (let i = this.maxTokenToRender + 1; i <= targetMax; i++) {
+                        this.renderGridToken(i);
+                    }
+                    this.maxTokenToRender = targetMax;
+
+                    // Update sentinel position
+                    if (this.scrollSentinel && this.scrollSentinel.parentNode) {
+                        if (this.maxTokenToRender < 9999) {
+                            this.scrollObserver.unobserve(this.scrollSentinel);
+                            this.tokenGrid.appendChild(this.scrollSentinel);
+                            this.scrollObserver.observe(this.scrollSentinel);
+                        } else {
+                            this.scrollObserver.unobserve(this.scrollSentinel);
+                            this.scrollSentinel.remove();
+                        }
+                    }
+                }
+
+                // Scroll to the token
                 requestAnimationFrame(() => {
                     this.scrollToHighestToken();
                 });
