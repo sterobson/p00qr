@@ -54,10 +54,6 @@
         @delete="handleDeleteAthleteData"
         @save="handleSaveToken"
       />
-
-      <div class="controls" :class="{ hidden: showContentArea }">
-        <button @click="handleTakeNextToken">Next token</button>
-      </div>
     </main>
 
     <!-- Sidebars and Modals -->
@@ -159,14 +155,6 @@ const initializeApp = async () => {
   await signalR.value.ensureConnectedToEvent()
 
   initialized.value = true
-}
-
-const handleTakeNextToken = () => {
-  store.event.currentToken = store.event.nextToken
-  store.event.nextToken++
-
-  store.isEditingExisting = false
-  store.currentMode = store.preferredMode || null
 }
 
 const switchMode = (mode) => {

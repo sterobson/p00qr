@@ -22,7 +22,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick, inject } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, inject } from 'vue'
 import { useAppStore } from '../stores/app'
 import { generateQRCode } from '../utils/qrcode'
 
@@ -31,11 +31,12 @@ defineEmits(['token-click'])
 const store = useAppStore()
 const gridRef = ref(null)
 const qrRefs = ref(new Map())
-const maxTokenToRender = ref(100)
+const maxTokenToRender = ref(50)
 
 const visibleTokens = computed(() => {
   const tokens = []
-  for (let i = 1; i <= Math.min(store.event.nextToken + 10, maxTokenToRender.value); i++) {
+  const limit = Math.max(maxTokenToRender.value, store.event.nextToken + 10)
+  for (let i = 1; i <= limit; i++) {
     tokens.push(i)
   }
   return tokens
@@ -81,7 +82,36 @@ const generateQRCodes = () => {
 watch(() => store.assignments, generateQRCodes, { deep: true })
 watch(() => store.event.nextToken, generateQRCodes)
 
+const handleScroll = () => {
+  if (!gridRef.value) return
+
+  const container = gridRef.value.parentElement
+  if (!container) return
+
+  const scrollPosition = container.scrollTop + container.clientHeight
+  const scrollHeight = container.scrollHeight
+
+  // Load more when within 500px of bottom
+  if (scrollHeight - scrollPosition < 500) {
+    maxTokenToRender.value += 50
+  }
+}
+
+let scrollContainer = null
+
 onMounted(() => {
   generateQRCodes()
+
+  // Add scroll listener to container
+  scrollContainer = gridRef.value?.parentElement
+  if (scrollContainer) {
+    scrollContainer.addEventListener('scroll', handleScroll)
+  }
+})
+
+onUnmounted(() => {
+  if (scrollContainer) {
+    scrollContainer.removeEventListener('scroll', handleScroll)
+  }
 })
 </script>
