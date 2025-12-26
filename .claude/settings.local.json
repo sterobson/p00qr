@@ -6,7 +6,9 @@
       "Bash(git push:*)",
       "Bash(powershell.exe -NoProfile -Command \"echo ''1'' | ./deploy.ps1\")",
       "Bash(git checkout:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(mkdir:*)",
+      "Bash(git mv:*)"
     ]
   }
 }
