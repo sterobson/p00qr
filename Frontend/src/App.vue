@@ -218,6 +218,11 @@ const handleSaveToken = async (data) => {
     store.assignments.push(assignment)
   }
 
+  // Update nextToken when taking a new token
+  if (!store.isEditingExisting && store.event.currentToken >= store.event.nextToken) {
+    store.event.nextToken = store.event.currentToken + 1
+  }
+
   // Send to SignalR
   if (signalR.value) {
     await signalR.value.sendTokenUsed(store.event.currentToken)
