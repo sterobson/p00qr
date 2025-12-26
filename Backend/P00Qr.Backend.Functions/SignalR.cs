@@ -4,6 +4,7 @@ using Microsoft.Azure.SignalR.Management;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Net;
+using P00Qr.Backend.Functions.Services;
 using FromBodyAttribute = Microsoft.Azure.Functions.Worker.Http.FromBodyAttribute;
 
 namespace P00Qr.Backend.Functions;
@@ -13,6 +14,7 @@ public class EventPayload
     public string ConnectionId { get; set; } = string.Empty;
     public string EventId { get; set; } = string.Empty;
     public string? MessageSourceId { get; set; }
+    public string DeviceId { get; set; } = string.Empty;
 }
 
 public class TokenAssignment
@@ -21,6 +23,7 @@ public class TokenAssignment
     public string AthleteId { get; set; } = string.Empty;
     public string AthleteName { get; set; } = string.Empty;
     public string ConnectionId { get; set; } = string.Empty;
+    public string DeviceId { get; set; } = string.Empty;
     public long Timestamp { get; set; }
 }
 
@@ -43,15 +46,16 @@ public class EventDetailsPayload : EventPayload
 public class SignalR
 {
     private readonly ILogger _logger;
-
     private readonly IServiceManager _serviceManager;
     private readonly IConfiguration _configuration;
+    private readonly ITableStorageService _tableStorageService;
     private const string P00QrHubName = "P00Qr";
 
-    public SignalR(IServiceManager serviceManager, IConfiguration configuration, ILoggerFactory loggerFactory)
+    public SignalR(IServiceManager serviceManager, IConfiguration configuration, ITableStorageService tableStorageService, ILoggerFactory loggerFactory)
     {
         _serviceManager = serviceManager;
         _configuration = configuration;
+        _tableStorageService = tableStorageService;
         _logger = loggerFactory.CreateLogger("negotiate");
     }
 
@@ -138,10 +142,34 @@ public class SignalR
 
     [Function(nameof(SendTokenUsed))]
     [SignalROutput(HubName = P00QrHubName)]
-    public static async Task<SignalRMessageAction> SendTokenUsed(
+    public async Task<SignalRMessageAction> SendTokenUsed(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [FromBody] TokenUsedPayload payload)
     {
+        // Update device last seen (fire-and-forget)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _tableStorageService.UpdateDeviceLastSeenAsync(payload.EventId, payload.DeviceId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update device last seen");
+            }
+        });
+
+        // Clear token from storage
+        try
+        {
+            await _tableStorageService.ClearTokenAsync(payload.EventId, payload.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to clear token {Token} for event {EventId}", payload.Token, payload.EventId);
+        }
+
+        // Return SignalR broadcast (unchanged)
         return new SignalRMessageAction("tokenUsed")
         {
             Arguments = [payload.MessageSourceId ?? "", payload.EventId, payload.Token],
@@ -151,10 +179,34 @@ public class SignalR
 
     [Function(nameof(SendTokenAssignments))]
     [SignalROutput(HubName = P00QrHubName)]
-    public static async Task<SignalRMessageAction> SendTokenAssignments(
+    public async Task<SignalRMessageAction> SendTokenAssignments(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [FromBody] TokenAssignmentsPayload payload)
     {
+        // Update device last seen (fire-and-forget)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _tableStorageService.UpdateDeviceLastSeenAsync(payload.EventId, payload.DeviceId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update device last seen");
+            }
+        });
+
+        // Save token assignments to storage
+        try
+        {
+            await _tableStorageService.SaveTokenAssignmentsAsync(payload.EventId, payload.Assignments, payload.DeviceId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save token assignments for event {EventId}", payload.EventId);
+        }
+
+        // Return SignalR broadcast (unchanged)
         return new SignalRMessageAction("tokenAssignments")
         {
             Arguments = [payload.MessageSourceId ?? "", payload.EventId, payload.Assignments],
@@ -162,18 +214,6 @@ public class SignalR
         };
     }
 
-    [Function(nameof(RequestFullHistory))]
-    [SignalROutput(HubName = P00QrHubName)]
-    public static async Task<SignalRMessageAction> RequestFullHistory(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
-        [FromBody] EventPayload payload)
-    {
-        return new SignalRMessageAction("requestFullHistory")
-        {
-            Arguments = [payload.MessageSourceId ?? "", payload.EventId],
-            GroupName = payload.EventId
-        };
-    }
 
     public class SyncDigestPayload : EventPayload
     {
@@ -183,10 +223,23 @@ public class SignalR
 
     [Function(nameof(SendSyncDigest))]
     [SignalROutput(HubName = P00QrHubName)]
-    public static async Task<SignalRMessageAction> SendSyncDigest(
+    public async Task<SignalRMessageAction> SendSyncDigest(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [FromBody] SyncDigestPayload payload)
     {
+        // Update device last seen (fire-and-forget)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _tableStorageService.UpdateDeviceLastSeenAsync(payload.EventId, payload.DeviceId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update device last seen");
+            }
+        });
+
         return new SignalRMessageAction("syncDigest")
         {
             Arguments = [payload.MessageSourceId ?? "", payload.EventId, payload.Count, payload.Tokens],
@@ -196,10 +249,23 @@ public class SignalR
 
     [Function(nameof(JoinEvent))]
     [SignalROutput(HubName = P00QrHubName)]
-    public static async Task<SignalRMessageAction> JoinEvent(
+    public async Task<SignalRMessageAction> JoinEvent(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [FromBody] EventPayload payload)
     {
+        // Update device last seen (fire-and-forget)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _tableStorageService.UpdateDeviceLastSeenAsync(payload.EventId, payload.DeviceId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update device last seen");
+            }
+        });
+
         return new SignalRMessageAction("deviceAddedToEvent")
         {
             Arguments = [payload.MessageSourceId ?? "", payload.EventId],
@@ -209,10 +275,23 @@ public class SignalR
 
     [Function(nameof(ResetEvent))]
     [SignalROutput(HubName = P00QrHubName)]
-    public static async Task<SignalRMessageAction> ResetEvent(
+    public async Task<SignalRMessageAction> ResetEvent(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [FromBody] EventPayload payload)
     {
+        // Update device last seen (fire-and-forget)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _tableStorageService.UpdateDeviceLastSeenAsync(payload.EventId, payload.DeviceId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update device last seen");
+            }
+        });
+
         return new SignalRMessageAction("resetEvent")
         {
             Arguments = [payload.MessageSourceId ?? "", payload.EventId],
@@ -222,10 +301,23 @@ public class SignalR
 
     [Function(nameof(SendEventDetails))]
     [SignalROutput(HubName = P00QrHubName)]
-    public static async Task<SignalRMessageAction> SendEventDetails(
+    public async Task<SignalRMessageAction> SendEventDetails(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [FromBody] EventDetailsPayload payload)
     {
+        // Update device last seen (fire-and-forget)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _tableStorageService.UpdateDeviceLastSeenAsync(payload.EventId, payload.DeviceId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update device last seen");
+            }
+        });
+
         return new SignalRMessageAction("setEventDetails")
         {
             Arguments = [payload.MessageSourceId ?? "", payload.EventId, payload.EventName, payload.NextToken ?? -1],
@@ -235,15 +327,136 @@ public class SignalR
 
     [Function(nameof(PingEvent))]
     [SignalROutput(HubName = P00QrHubName)]
-    public static async Task<SignalRMessageAction> PingEvent(
+    public async Task<SignalRMessageAction> PingEvent(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         [FromBody] EventPayload payload)
     {
+        // Update device last seen (fire-and-forget)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _tableStorageService.UpdateDeviceLastSeenAsync(payload.EventId, payload.DeviceId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update device last seen");
+            }
+        });
+
         return new SignalRMessageAction("pingEvent")
         {
             Arguments = [payload.MessageSourceId ?? "", payload.EventId],
             GroupName = payload.EventId
         };
+    }
+
+    [Function(nameof(GetFullHistory))]
+    public async Task<HttpResponseData> GetFullHistory(
+        [HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
+    {
+        if (!IsValidRequestSource(req))
+        {
+            return req.CreateResponse(HttpStatusCode.Unauthorized);
+        }
+
+        string? eventId = req.Query["eventId"];
+        if (string.IsNullOrEmpty(eventId))
+        {
+            HttpResponseData badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+            await badResponse.WriteStringAsync("Please provide eventId query parameter.");
+            return badResponse;
+        }
+
+        try
+        {
+            List<TokenAssignment> assignments = await _tableStorageService.GetAllTokenAssignmentsAsync(eventId);
+
+            HttpResponseData response = req.CreateResponse(HttpStatusCode.OK);
+            await response.WriteAsJsonAsync(assignments);
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get full history for event {EventId}", eventId);
+            HttpResponseData errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteStringAsync("Failed to retrieve token assignments.");
+            return errorResponse;
+        }
+    }
+
+    public class SetDeviceNamePayload
+    {
+        public string EventId { get; set; } = string.Empty;
+        public string DeviceId { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+    }
+
+    [Function(nameof(SetDeviceName))]
+    public async Task<HttpResponseData> SetDeviceName(
+        [HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData req,
+        [FromBody] SetDeviceNamePayload payload)
+    {
+        if (!IsValidRequestSource(req))
+        {
+            return req.CreateResponse(HttpStatusCode.Unauthorized);
+        }
+
+        if (string.IsNullOrEmpty(payload.EventId) || string.IsNullOrEmpty(payload.DeviceId))
+        {
+            HttpResponseData badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+            await badResponse.WriteStringAsync($"Please provide both {nameof(payload.EventId)} and {nameof(payload.DeviceId)}.");
+            return badResponse;
+        }
+
+        try
+        {
+            await _tableStorageService.SetDeviceNameAsync(payload.EventId, payload.DeviceId, payload.DisplayName);
+
+            HttpResponseData response = req.CreateResponse(HttpStatusCode.OK);
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set device name for device {DeviceId} in event {EventId}", payload.DeviceId, payload.EventId);
+            HttpResponseData errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteStringAsync("Failed to set device name.");
+            return errorResponse;
+        }
+    }
+
+    [Function(nameof(GetHighestToken))]
+    public async Task<HttpResponseData> GetHighestToken(
+        [HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
+    {
+        if (!IsValidRequestSource(req))
+        {
+            return req.CreateResponse(HttpStatusCode.Unauthorized);
+        }
+
+        string? eventId = req.Query["eventId"];
+        if (string.IsNullOrEmpty(eventId))
+        {
+            HttpResponseData badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+            await badResponse.WriteStringAsync("Please provide eventId query parameter.");
+            return badResponse;
+        }
+
+        try
+        {
+            int highestToken = await _tableStorageService.GetHighestTokenNumberAsync(eventId);
+
+            HttpResponseData response = req.CreateResponse(HttpStatusCode.OK);
+            await response.WriteAsJsonAsync(new { highestToken });
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get highest token for event {EventId}", eventId);
+            HttpResponseData errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteStringAsync("Failed to retrieve highest token.");
+            return errorResponse;
+        }
     }
 
     private bool IsValidRequestSource(HttpRequestData req)

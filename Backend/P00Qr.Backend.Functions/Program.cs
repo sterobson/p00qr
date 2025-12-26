@@ -3,6 +3,8 @@ using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Azure.SignalR.Management;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using P00Qr.Backend.Functions.Services;
 
 FunctionsApplicationBuilder builder = FunctionsApplication.CreateBuilder(args);
 
@@ -25,6 +27,12 @@ builder.Services
                 {
                     option.ConnectionString = connectionString;
                 }).BuildServiceManager(); // Changed from Build() to BuildServiceManager()
+        })
+    .AddSingleton<ITableStorageService>(serviceProvider =>
+        {
+            string? connectionString = Environment.GetEnvironmentVariable("AzureWebJobsStorage");
+            ILogger<TableStorageService> logger = serviceProvider.GetRequiredService<ILogger<TableStorageService>>();
+            return new TableStorageService(connectionString!, logger);
         });
 
 builder.Build().Run();

@@ -1,7 +1,25 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
+// Generate or retrieve persistent device ID
+function getDeviceId() {
+  let deviceId = localStorage.getItem('p00qr-deviceId')
+  if (!deviceId) {
+    // Generate UUID v4
+    deviceId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0
+      const v = c === 'x' ? r : (r & 0x3 | 0x8)
+      return v.toString(16)
+    })
+    localStorage.setItem('p00qr-deviceId', deviceId)
+  }
+  return deviceId
+}
+
 export const useAppStore = defineStore('app', () => {
+  // Device state
+  const deviceId = ref(getDeviceId())
+
   // Event state
   const event = ref({
     id: '',
@@ -77,6 +95,7 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     // State
+    deviceId,
     event,
     connectionId,
     hubConnection,

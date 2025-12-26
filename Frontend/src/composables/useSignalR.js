@@ -75,8 +75,9 @@ export function useSignalR() {
         connectedEventId.value = store.event.id
         store.connectionId = store.hubConnection.connectionId
 
+        // Load history from server
         setTimeout(() => {
-          requestFullHistory()
+          getFullHistory()
         }, 1000)
       }
     } finally {
@@ -200,25 +201,6 @@ export function useSignalR() {
       lastMessageReceived.value = Date.now()
     })
 
-    store.hubConnection.on('requestFullHistory', (msgSourceId, eventId) => {
-      if (msgSourceId == messageSourceId) {
-        lastMessageReceived.value = Date.now()
-        return
-      }
-
-      console.log('Received requestFullHistory from:', msgSourceId)
-
-      if (store.assignments.length > 0) {
-        const delay = Math.random() * 500 + 100
-        setTimeout(() => {
-          const allAssignments = store.assignments.map(a => ({ ...a }))
-          sendTokenAssignments(allAssignments)
-        }, delay)
-      }
-
-      lastMessageReceived.value = Date.now()
-    })
-
     store.hubConnection.on('syncDigest', (msgSourceId, eventId, count, tokens) => {
       if (msgSourceId == messageSourceId) {
         lastMessageReceived.value = Date.now()
@@ -235,9 +217,9 @@ export function useSignalR() {
 
       if (needsSync) {
         console.log('Out of sync detected! My tokens:', myTokens.length, 'Their tokens:', theirTokens.length)
-        console.log('Requesting full history...')
+        console.log('Requesting full history from server...')
         setTimeout(() => {
-          requestFullHistory()
+          getFullHistory()
         }, Math.random() * 1000 + 500)
       }
 
@@ -269,10 +251,18 @@ export function useSignalR() {
     if (store.functionKey)
       url.searchParams.set('code', encodeURIComponent(store.functionKey))
 
+    // For GET requests with query params, add them to URL
+    if (method === 'GET' && queryParams) {
+      Object.keys(queryParams).forEach(key => {
+        url.searchParams.set(key, queryParams[key])
+      })
+    }
+
     let body = method == 'GET' ? null : {
       ...queryParams,
       connectionId: store.hubConnection?.connection?.connectionId ?? null,
-      messageSourceId: messageSourceId
+      messageSourceId: messageSourceId,
+      deviceId: store.deviceId
     }
 
     const headers = { 'Content-Type': 'application/json' }
@@ -307,20 +297,29 @@ export function useSignalR() {
   }
 
   const addToGroup = async (groupName) => {
-    await performPost('AddToGroup', { eventId: groupName })
+    await performPost('AddToGroup', {
+      eventId: groupName
+    })
   }
 
   const removeFromGroup = async (groupName) => {
-    await performPost('RemoveFromGroup', { eventId: groupName })
+    await performPost('RemoveFromGroup', {
+      eventId: groupName
+    })
   }
 
   const sendTokenUsed = async (token) => {
     await ensureConnectedToEvent(store.event.id)
-    await performPost('SendTokenUsed', { eventId: store.event.id, token: token })
+    await performPost('SendTokenUsed', {
+      eventId: store.event.id,
+      token: token
+    })
   }
 
   const joinEvent = async () => {
-    await performPost('JoinEvent', { eventId: store.event.id })
+    await performPost('JoinEvent', {
+      eventId: store.event.id
+    })
   }
 
   const ensureLocalHostKey = async () => {
@@ -372,7 +371,9 @@ export function useSignalR() {
 
   const resetEvent = async () => {
     await ensureConnectedToEvent(store.event.id)
-    await performPost('ResetEvent', { eventId: store.event.id })
+    await performPost('ResetEvent', {
+      eventId: store.event.id
+    })
   }
 
   const sendEventDetails = async (eventName, nextToken) => {
@@ -382,7 +383,9 @@ export function useSignalR() {
 
   const pingEvent = async () => {
     await ensureConnectedToEvent(store.event.id)
-    await performPost('PingEvent', { eventId: store.event.id })
+    await performPost('PingEvent', {
+      eventId: store.event.id
+    })
   }
 
   const inferEntryMethod = (athleteId) => {
@@ -392,32 +395,41 @@ export function useSignalR() {
 
   const mergeAssignments = (assignments) => {
     assignments.forEach(incoming => {
-      const position = parseInt(incoming.Position.replace('P', ''))
+      // Handle both old format (Position) and new format (position)
+      const positionStr = incoming.Position || incoming.position
+      const position = parseInt(positionStr.replace('P', ''))
+
+      // Handle both old format (uppercase) and new format (camelCase)
+      const athleteId = incoming.AthleteId || incoming.athleteId || ''
+      const athleteName = incoming.AthleteName || incoming.athleteName || ''
+      const timestamp = incoming.Timestamp || incoming.timestamp || incoming.assignmentTimestamp || Date.now()
+      const connectionId = incoming.ConnectionId || incoming.connectionId || ''
+
       const existing = store.assignments.find(a => a.token === position)
 
       if (!existing) {
         store.assignments.push({
           token: position,
-          athleteBarcode: incoming.AthleteId || '',
-          athleteName: incoming.AthleteName || '',
-          timestamp: incoming.Timestamp,
-          entryMethod: inferEntryMethod(incoming.AthleteId),
-          connectionId: incoming.ConnectionId,
+          athleteBarcode: athleteId,
+          athleteName: athleteName,
+          timestamp: timestamp,
+          entryMethod: inferEntryMethod(athleteId),
+          connectionId: connectionId,
           isLocal: false
         })
       } else {
-        const shouldUpdate = incoming.Timestamp > existing.timestamp ||
-          (incoming.Timestamp === existing.timestamp && incoming.ConnectionId > existing.connectionId)
+        const shouldUpdate = timestamp > existing.timestamp ||
+          (timestamp === existing.timestamp && connectionId > existing.connectionId)
 
         if (shouldUpdate) {
-          existing.athleteBarcode = incoming.AthleteId || ''
-          existing.athleteName = incoming.AthleteName || ''
-          existing.timestamp = incoming.Timestamp
-          existing.entryMethod = inferEntryMethod(incoming.AthleteId)
-          existing.connectionId = incoming.ConnectionId
+          existing.athleteBarcode = athleteId
+          existing.athleteName = athleteName
+          existing.timestamp = timestamp
+          existing.entryMethod = inferEntryMethod(athleteId)
+          existing.connectionId = connectionId
           existing.isLocal = false
 
-          console.log(`Updated token ${position} with newer data (timestamp: ${incoming.Timestamp}, connectionId: ${incoming.ConnectionId})`)
+          console.log(`Updated token ${position} with newer data (timestamp: ${timestamp}, connectionId: ${connectionId})`)
         }
       }
     })
@@ -433,6 +445,7 @@ export function useSignalR() {
       AthleteId: a.athleteBarcode || '',
       AthleteName: a.athleteName || '',
       ConnectionId: a.connectionId || store.connectionId,
+      DeviceId: store.deviceId,
       Timestamp: a.timestamp
     }))
 
@@ -449,10 +462,24 @@ export function useSignalR() {
       .slice(0, count)
   }
 
-  const requestFullHistory = async () => {
+  const getFullHistory = async () => {
     await ensureConnectedToEvent(store.event.id)
-    await performPost('RequestFullHistory', { eventId: store.event.id })
-    console.log('Requested full history from all devices')
+    const response = await performGet('GetFullHistory', { eventId: store.event.id })
+
+    if (response.ok) {
+      const assignments = await response.json()
+      console.log('Retrieved full history from server:', assignments.length, 'assignments')
+
+      // Merge assignments into local state
+      if (assignments && assignments.length > 0) {
+        mergeAssignments(assignments)
+      }
+
+      return assignments
+    } else {
+      console.error('Failed to get full history:', response.status)
+      return []
+    }
   }
 
   const sendSyncDigest = async () => {
@@ -488,7 +515,7 @@ export function useSignalR() {
     pingEvent,
     sendTokenAssignments,
     getRecentAssignments,
-    requestFullHistory,
+    getFullHistory,
     sendSyncDigest
   }
 }
