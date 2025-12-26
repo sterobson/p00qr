@@ -69,16 +69,40 @@ if ($deployFrontend) {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    # Check if there are uncommitted changes
+    # Check if there are uncommitted changes in frontend files
     $gitStatus = git status --porcelain
-    if ($gitStatus) {
-        Write-Warning "You have uncommitted changes."
-        Write-Gray "The deployment will not affect your working directory."
-        $continue = Read-Host "Continue? (y/n)"
-        if ($continue -ne "y") {
-            Write-Warning "Deployment cancelled."
-            $deploymentSuccess = $false
+    $frontendChanges = $gitStatus | Where-Object {
+        $_ -match '^\s*M.*\.(html|css|js|svg|json)$' -or
+        $_ -match '^\s*M.*scripts/' -or
+        $_ -match '^\s*M.*public/'
+    }
+
+    if ($frontendChanges) {
+        Write-Warning "Found uncommitted frontend changes."
+        Write-Info "Automatically committing and pushing to main branch..."
+
+        # Add all frontend-related changes
+        git add index.html styles.css favicon.svg scripts/ public/ 2>&1 | Out-Null
+
+        # Commit with timestamp
+        $commitMessage = "Deploy frontend changes - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        git commit -m $commitMessage 2>&1 | Out-Null
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Gray "Pushing to origin/main..."
+            git push origin main 2>&1 | Out-Null
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "Changes committed and pushed to main branch"
+            } else {
+                Write-Error "Failed to push to origin/main"
+                $deploymentSuccess = $false
+            }
+        } else {
+            Write-Warning "No changes to commit (possibly already committed)"
         }
+    } else {
+        Write-Success "No uncommitted frontend changes"
     }
 
     if ($deploymentSuccess) {
