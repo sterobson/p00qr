@@ -1,21 +1,63 @@
 #!/usr/bin/env pwsh
 # Deployment script for parkrun P00Qr app
 
+param(
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("local", "production")]
+    [string]$Environment,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Frontend,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Backend
+)
+
 # Color functions for better output
 function Write-Info($message) { Write-Host $message -ForegroundColor Cyan }
 function Write-Success($message) { Write-Host $message -ForegroundColor Green }
 function Write-Warning($message) { Write-Host $message -ForegroundColor Yellow }
-function Write-Error($message) { Write-Host $message -ForegroundColor Red }
+function Write-ErrorMessage($message) { Write-Host $message -ForegroundColor Red }
 function Write-Gray($message) { Write-Host $message -ForegroundColor Gray }
+
+# Function to kill process on a specific port
+function Stop-ProcessOnPort {
+    param(
+        [int]$Port,
+        [string]$ServiceName
+    )
+
+    $connection = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($connection) {
+        Write-Warning "$ServiceName is running on port $Port. Shutting it down..."
+        $processId = $connection.OwningProcess
+        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        Write-Success "$ServiceName stopped"
+        return $true
+    }
+    return $false
+}
 
 # Configuration
 $config = @{
-    Frontend = @{
-        Url = "https://sterobson.github.io/p00qr/"
+    local = @{
+        Frontend = @{
+            Port = 5173
+        }
+        Backend = @{
+            Port = 7172
+            Url = "http://localhost:7172"
+        }
     }
-    Backend = @{
-        AppName = "sterobson-personal"
-        ProjectPath = "Backend\P00Qr.Backend.Functions"
+    production = @{
+        Frontend = @{
+            Url = "https://sterobson.github.io/p00qr/"
+        }
+        Backend = @{
+            AppName = "sterobson-personal"
+            ProjectPath = "Backend\P00Qr.Backend.Functions"
+        }
     }
 }
 
@@ -26,43 +68,174 @@ Write-Host "  P00Qr Deployment Tool" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Ask what to deploy
-Write-Warning "Select deployment option:"
-Write-Host "  1) Deploy Frontend (GitHub Pages)" -ForegroundColor White
-Write-Host "  2) Deploy Backend (Azure Functions)" -ForegroundColor White
-Write-Host "  3) Deploy Both" -ForegroundColor White
-Write-Host ""
+# Ask for environment if not provided
+if (-not $Environment) {
+    Write-Warning "Select deployment environment:"
+    Write-Host "  1. Local (Start local development servers)" -ForegroundColor White
+    Write-Host "  2. Production (Deploy to GitHub Pages + Azure)" -ForegroundColor White
+    Write-Host ""
 
-$choice = Read-Host "Enter your choice (1-3)"
+    $choice = Read-Host "Enter choice (1 or 2)"
 
-$deployFrontend = $false
-$deployBackend = $false
-
-switch ($choice) {
-    "1" { $deployFrontend = $true }
-    "2" { $deployBackend = $true }
-    "3" {
-        $deployFrontend = $true
-        $deployBackend = $true
+    switch ($choice) {
+        "1" { $Environment = "local" }
+        "2" { $Environment = "production" }
+        default {
+            Write-ErrorMessage "Invalid choice. Please select 1 or 2."
+            exit 1
+        }
     }
-    default {
-        Write-Error "Invalid choice. Exiting."
-        exit 1
+}
+
+# Ask what to deploy if not specified
+if (-not $Frontend -and -not $Backend) {
+    Write-Host ""
+    Write-Warning "What would you like to deploy?"
+    Write-Host "  1. Frontend" -ForegroundColor White
+    Write-Host "  2. Backend (Azure Functions)" -ForegroundColor White
+    Write-Host "  3. Both" -ForegroundColor White
+    Write-Host ""
+
+    $choice = Read-Host "Enter choice (1, 2, or 3)"
+
+    switch ($choice) {
+        "1" { $Frontend = $true }
+        "2" { $Backend = $true }
+        "3" {
+            $Frontend = $true
+            $Backend = $true
+        }
+        default {
+            Write-ErrorMessage "Invalid choice."
+            exit 1
+        }
     }
 }
 
 Write-Host ""
-Write-Info "Deploying:"
-if ($deployFrontend) { Write-Gray "  - Frontend (GitHub Pages)" }
-if ($deployBackend) { Write-Gray "  - Backend (Azure Functions)" }
+if ($Environment -eq "local") {
+    Write-Info "Starting local development environment"
+} else {
+    Write-Info "Deploying to: $Environment"
+}
+if ($Frontend) { Write-Gray "  - Frontend" }
+if ($Backend) { Write-Gray "  - Backend (Azure Functions)" }
 Write-Host ""
 
+$selectedConfig = $config[$Environment]
 $deploymentSuccess = $true
 
 # ============================================================================
-# Deploy Frontend
+# Local Backend - Start Azure Functions
 # ============================================================================
-if ($deployFrontend) {
+if ($Environment -eq "local" -and $Backend) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Info "  Starting Azure Functions"
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    # Check if already running and stop it
+    $wasRunning = Stop-ProcessOnPort -Port $selectedConfig.Backend.Port -ServiceName "Azure Functions"
+
+    # Check for Azurite
+    Write-Info "Checking Azurite (Azure Storage Emulator)..."
+    $azuriteRunning = Get-NetTCPConnection -LocalPort 10000 -State Listen -ErrorAction SilentlyContinue
+
+    if (-not $azuriteRunning) {
+        Write-Warning "Azurite not running. Starting Azurite..."
+        try {
+            Start-Process -FilePath "azurite" -ArgumentList "--silent" -WindowStyle Hidden -ErrorAction Stop
+            Start-Sleep -Seconds 2
+            Write-Success "Azurite started"
+        } catch {
+            Write-Warning "Could not start Azurite. Install with: npm install -g azurite"
+        }
+    } else {
+        Write-Success "Azurite already running"
+    }
+
+    # Build the backend
+    Write-Info "Building Azure Functions..."
+    $backendPath = Join-Path $PSScriptRoot $selectedConfig.production.Backend.ProjectPath
+    Push-Location $backendPath
+    try {
+        dotnet build --nologo --verbosity quiet
+        if ($LASTEXITCODE -ne 0) {
+            Write-ErrorMessage "Backend build failed"
+            $deploymentSuccess = $false
+        } else {
+            Write-Success "Backend build completed"
+        }
+    } finally {
+        Pop-Location
+    }
+
+    if ($deploymentSuccess) {
+        Write-Info "Starting Azure Functions..."
+        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "cd '$backendPath'; func start --port $($selectedConfig.Backend.Port)" -WindowStyle Normal
+        Start-Sleep -Seconds 5
+
+        $funcRunning = Get-NetTCPConnection -LocalPort $selectedConfig.Backend.Port -State Listen -ErrorAction SilentlyContinue
+        if ($funcRunning) {
+            Write-Success "Azure Functions started on $($selectedConfig.Backend.Url)"
+        } else {
+            Write-Warning "Azure Functions may still be starting. Check the console window."
+        }
+    }
+}
+
+# ============================================================================
+# Local Frontend - Start Dev Server
+# ============================================================================
+if ($Environment -eq "local" -and $Frontend) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Info "  Starting Frontend Dev Server"
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    # Check if already running and stop it
+    $wasRunning = Stop-ProcessOnPort -Port $selectedConfig.Frontend.Port -ServiceName "Frontend dev server"
+
+    $frontendPath = Join-Path $PSScriptRoot "Frontend"
+
+    # Check if node_modules exists
+    $nodeModules = Join-Path $frontendPath "node_modules"
+    if (-not (Test-Path $nodeModules)) {
+        Write-Info "Installing frontend dependencies..."
+        Push-Location $frontendPath
+        try {
+            npm install --silent
+            if ($LASTEXITCODE -ne 0) {
+                Write-ErrorMessage "Failed to install dependencies"
+                $deploymentSuccess = $false
+            } else {
+                Write-Success "Dependencies installed"
+            }
+        } finally {
+            Pop-Location
+        }
+    }
+
+    if ($deploymentSuccess) {
+        Write-Info "Starting frontend dev server..."
+        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "cd '$frontendPath'; npm run dev" -WindowStyle Normal
+        Start-Sleep -Seconds 3
+
+        $viteRunning = Get-NetTCPConnection -LocalPort $selectedConfig.Frontend.Port -State Listen -ErrorAction SilentlyContinue
+        if ($viteRunning) {
+            Write-Success "Frontend started on http://localhost:$($selectedConfig.Frontend.Port)"
+        } else {
+            Write-Warning "Frontend may still be starting. Check the console window."
+        }
+    }
+}
+
+# ============================================================================
+# Deploy Frontend (Production)
+# ============================================================================
+if ($Environment -eq "production" -and $Frontend) {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Info "  Deploying Frontend"
@@ -76,7 +249,7 @@ if ($deployFrontend) {
     Pop-Location
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Frontend build failed"
+        Write-ErrorMessage "Frontend build failed"
         $deploymentSuccess = $false
         return
     }
@@ -152,7 +325,7 @@ if ($deployFrontend) {
             if ($LASTEXITCODE -eq 0) {
                 Write-Success "Changes committed and pushed to main branch"
             } else {
-                Write-Error "Failed to push to origin/main"
+                Write-ErrorMessage "Failed to push to origin/main"
                 $deploymentSuccess = $false
             }
         } else {
@@ -218,7 +391,7 @@ if ($deployFrontend) {
                             }
                         }
                     } else {
-                        Write-Error "Dist directory not found at: $distPath"
+                        Write-ErrorMessage "Dist directory not found at: $distPath"
                         $deploymentSuccess = $false
                         return
                     }
@@ -241,9 +414,9 @@ if ($deployFrontend) {
 
                         if ($LASTEXITCODE -eq 0) {
                             Write-Success "Frontend deployed to GitHub Pages!"
-                            Write-Gray "URL: $($config.Frontend.Url)"
+                            Write-Gray "URL: $($selectedConfig.Frontend.Url)"
                         } else {
-                            Write-Error "Failed to push to GitHub"
+                            Write-ErrorMessage "Failed to push to GitHub"
                             $deploymentSuccess = $false
                         }
                     } else {
@@ -260,26 +433,26 @@ if ($deployFrontend) {
             }
         }
         catch {
-            Write-Error "Error during frontend deployment: $_"
+            Write-ErrorMessage "Error during frontend deployment: $_"
             $deploymentSuccess = $false
         }
     }
 }
 
 # ============================================================================
-# Deploy Backend (Azure Functions)
+# Deploy Backend (Azure Functions) - Production
 # ============================================================================
-if ($deployBackend) {
+if ($Environment -eq "production" -and $Backend) {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Info "  Deploying Backend (Azure Functions)"
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    $backendPath = Join-Path $PSScriptRoot $config.Backend.ProjectPath
+    $backendPath = Join-Path $PSScriptRoot $selectedConfig.Backend.ProjectPath
 
     if (-not (Test-Path $backendPath)) {
-        Write-Error "Backend directory not found at: $backendPath"
+        Write-ErrorMessage "Backend directory not found at: $backendPath"
         $deploymentSuccess = $false
     } else {
         # Check if func tool is installed
@@ -287,7 +460,7 @@ if ($deployBackend) {
 
         $funcVersion = func --version 2>&1
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "Azure Functions Core Tools not found!"
+            Write-ErrorMessage "Azure Functions Core Tools not found!"
             Write-Host ""
             Write-Warning "Install Azure Functions Core Tools:"
             Write-Gray "  npm install -g azure-functions-core-tools@4"
@@ -308,7 +481,7 @@ if ($deployBackend) {
             } else {
                 $azResult = az account show 2>&1
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Error "Not authenticated with Azure!"
+                    Write-ErrorMessage "Not authenticated with Azure!"
                     Write-Host ""
                     Write-Warning "Please login to Azure:"
                     Write-Gray "  az login"
@@ -329,7 +502,7 @@ if ($deployBackend) {
                     dotnet build -c Release --nologo
 
                     if ($LASTEXITCODE -ne 0) {
-                        Write-Error "Backend build failed"
+                        Write-ErrorMessage "Backend build failed"
                         $deploymentSuccess = $false
                     } else {
                         Write-Success "Backend build completed"
@@ -337,12 +510,12 @@ if ($deployBackend) {
                         # Deploy
                         Write-Host ""
                         Write-Info "Deploying to Azure..."
-                        Write-Gray "Function App: $($config.Backend.AppName)"
+                        Write-Gray "Function App: $($selectedConfig.Backend.AppName)"
                         Write-Gray "This may take a few minutes..."
                         Write-Host ""
 
                         $ErrorActionPreference = "Continue"
-                        func azure functionapp publish $config.Backend.AppName --dotnet-isolated 2>&1 | ForEach-Object {
+                        func azure functionapp publish $selectedConfig.Backend.AppName --dotnet-isolated 2>&1 | ForEach-Object {
                             if ($_ -is [System.Management.Automation.ErrorRecord]) {
                                 if ($_.Exception.Message -and $_.Exception.Message.Trim()) {
                                     Write-Host $_.Exception.Message
@@ -356,9 +529,9 @@ if ($deployBackend) {
                         if ($LASTEXITCODE -eq 0) {
                             Write-Host ""
                             Write-Success "Backend deployed to Azure!"
-                            Write-Gray "Function App: $($config.Backend.AppName)"
+                            Write-Gray "Function App: $($selectedConfig.Backend.AppName)"
                         } else {
-                            Write-Error "Backend deployment failed"
+                            Write-ErrorMessage "Backend deployment failed"
                             $deploymentSuccess = $false
                         }
                     }
@@ -378,19 +551,30 @@ Write-Host "========================================" -ForegroundColor Cyan
 if ($deploymentSuccess) {
     Write-Success "  Deployment Complete!"
 } else {
-    Write-Error "  Deployment Failed!"
+    Write-ErrorMessage "  Deployment Failed!"
 }
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 if ($deploymentSuccess) {
-    if ($deployFrontend) {
-        Write-Host "  [OK] Frontend -> GitHub Pages" -ForegroundColor Green
-        Write-Gray "       $($config.Frontend.Url)"
-    }
-    if ($deployBackend) {
-        Write-Host "  [OK] Backend -> Azure Functions" -ForegroundColor Green
-        Write-Gray "       App: $($config.Backend.AppName)"
+    if ($Environment -eq "local") {
+        Write-Host "Local development servers:" -ForegroundColor White
+        if ($Backend) {
+            Write-Host "  [OK] Backend  -> $($selectedConfig.Backend.Url)" -ForegroundColor Green
+        }
+        if ($Frontend) {
+            Write-Host "  [OK] Frontend -> http://localhost:$($selectedConfig.Frontend.Port)" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "Deployed to: $Environment" -ForegroundColor White
+        if ($Frontend) {
+            Write-Host "  [OK] Frontend -> GitHub Pages" -ForegroundColor Green
+            Write-Gray "       $($selectedConfig.Frontend.Url)"
+        }
+        if ($Backend) {
+            Write-Host "  [OK] Backend -> Azure Functions" -ForegroundColor Green
+            Write-Gray "       App: $($selectedConfig.Backend.AppName)"
+        }
     }
     Write-Host ""
     exit 0
