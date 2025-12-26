@@ -189,11 +189,21 @@ const handleTokenClick = (token) => {
     // Default to last used mode or 'qr'
     store.currentMode = store.preferredMode || 'qr'
   } else {
-    // Create new assignment for this token
+    // Taking a new token - update nextToken to gray out this and previous tokens
     store.event.currentToken = token
     store.isEditingExisting = false
     // Default to last used mode or 'qr'
     store.currentMode = store.preferredMode || 'qr'
+
+    // Update nextToken when taking a token (viewing it counts as taking it)
+    if (token >= store.event.nextToken) {
+      store.event.nextToken = token + 1
+
+      // Notify server that token is being used
+      if (signalR.value) {
+        signalR.value.sendTokenUsed(token)
+      }
+    }
   }
 }
 
@@ -218,14 +228,8 @@ const handleSaveToken = async (data) => {
     store.assignments.push(assignment)
   }
 
-  // Update nextToken when taking a new token
-  if (!store.isEditingExisting && store.event.currentToken >= store.event.nextToken) {
-    store.event.nextToken = store.event.currentToken + 1
-  }
-
   // Send to SignalR
   if (signalR.value) {
-    await signalR.value.sendTokenUsed(store.event.currentToken)
     await signalR.value.sendTokenAssignments([assignment])
   }
 
