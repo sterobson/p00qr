@@ -4,7 +4,7 @@
       <div
         v-for="token in visibleTokens"
         :key="token"
-        class="token-item"
+        class="token-grid-item"
         :class="getTokenClass(token)"
         @click="$emit('token-click', token)"
       >
@@ -47,10 +47,16 @@ const getAssignment = (token) => {
 
 const getTokenClass = (token) => {
   const assignment = getAssignment(token)
+  const maxAssignedToken = store.assignments.length > 0
+    ? Math.max(...store.assignments.map(a => a.token))
+    : 0
+  const isPast = token < maxAssignedToken
+
   return {
     'has-assignment': !!assignment,
     'is-current': token === store.event.currentToken,
-    'is-next': token === store.event.nextToken
+    'is-next': token === store.event.nextToken,
+    'is-past': isPast
   }
 }
 
