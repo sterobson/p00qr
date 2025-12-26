@@ -72,32 +72,13 @@ if ($deployFrontend) {
     # Update version number
     Write-Info "Updating version number..."
     $versionFile = Join-Path $PSScriptRoot "version.json"
-    $today = Get-Date -Format "yyyy.MM.dd"
-    $currentVersion = "2025.12.26-01"
-    $deploymentNumber = 1
+    $now = Get-Date
+    $today = $now.ToString("yyyy.MM.dd")
+    $timeOfDay = $now.ToString("HHmm")
 
-    if (Test-Path $versionFile) {
-        $versionData = Get-Content $versionFile | ConvertFrom-Json
-        $currentVersion = $versionData.version
-
-        # Extract date and number from current version
-        if ($currentVersion -match '^(\d{4}\.\d{2}\.\d{2})-(\d{2})$') {
-            $versionDate = $matches[1]
-            $versionNumber = [int]$matches[2]
-
-            if ($versionDate -eq $today) {
-                # Same day - increment number
-                $deploymentNumber = $versionNumber + 1
-            } else {
-                # New day - reset to 01
-                $deploymentNumber = 1
-            }
-        }
-    }
-
-    # Create new version string
-    $newVersion = "$today-$($deploymentNumber.ToString('00'))"
-    $buildDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    # Create new version string with date and time
+    $newVersion = "$today-$timeOfDay"
+    $buildDate = $now.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
     # Update version.json
     $versionContent = @{
