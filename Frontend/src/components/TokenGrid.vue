@@ -9,7 +9,7 @@
         @click="$emit('token-click', token)"
       >
         <div class="token-number">P{{ String(token).padStart(4, '0') }}</div>
-        <div v-if="getAssignment(token)" :ref="el => setQRRef(token, el)" class="token-qr"></div>
+        <div :ref="el => setQRRef(token, el)" class="token-qr"></div>
       </div>
     </div>
   </div>
@@ -67,19 +67,23 @@ const setQRRef = (token, el) => {
 
 const generateQRCodes = () => {
   nextTick(() => {
-    console.log(`generateQRCodes: Processing ${store.assignments.length} assignments`, store.assignments.map(a => a.token))
+    console.log(`generateQRCodes: Processing ALL visible tokens`)
     console.log(`QR refs available for tokens:`, Array.from(qrRefs.value.keys()))
 
-    store.assignments.forEach(assignment => {
-      const element = qrRefs.value.get(assignment.token)
+    // Generate QR codes for ALL visible tokens
+    visibleTokens.value.forEach(token => {
+      const element = qrRefs.value.get(token)
       if (element) {
-        const qrData = `P${String(assignment.token).padStart(4, '0')}${assignment.athleteBarcode ? ',' + assignment.athleteBarcode : ''}`
-        console.log(`Generating QR for token ${assignment.token}: ${qrData}`)
+        const assignment = getAssignment(token)
+        // For assigned tokens: P0001,A123456
+        // For unassigned tokens: P0001
+        const qrData = `P${String(token).padStart(4, '0')}${assignment?.athleteBarcode ? ',' + assignment.athleteBarcode : ''}`
+        console.log(`Generating QR for token ${token}: ${qrData}`)
         // Clear and regenerate to ensure QR code is always displayed
         element.innerHTML = ''
         generateQRCode(element, qrData, 128)
       } else {
-        console.warn(`No QR element found for token ${assignment.token} - may not be in visible range`)
+        console.warn(`No QR element found for token ${token}`)
       }
     })
   })
