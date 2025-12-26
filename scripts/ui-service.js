@@ -167,13 +167,22 @@ export class UIService {
         // Swipe gesture support
         this.setupSwipeGestures();
 
-        // Prevent body scroll on mobile, but allow scrolling in the grid container
+        // Prevent body scroll on mobile only when modals/menus are open
         document.body.addEventListener('touchmove', (e) => {
-            // Allow scrolling if the touch is within the token grid container
+            // Allow scrolling in the grid container
             if (e.target.closest('.token-grid-container')) {
-                return; // Allow default scrolling behavior
+                return;
             }
-            e.preventDefault(); // Prevent scrolling elsewhere
+            // Allow scrolling in content area (for mode content)
+            if (e.target.closest('.content-area')) {
+                return;
+            }
+            // Allow scrolling in aside menus
+            if (e.target.closest('aside')) {
+                return;
+            }
+            // Prevent scrolling on main body (prevents bounce effects)
+            e.preventDefault();
         }, { passive: false });
         window.addEventListener('resize', () => this.updateUI());
     }
@@ -1624,7 +1633,17 @@ export class UIService {
 
             // Clone the token element for animation
             const clone = tokenElement.cloneNode(true);
-            clone.classList.remove('used', 'used-local', 'used-remote');
+
+            // Store the final state classes
+            const finalUsedClasses = {
+                used: clone.classList.contains('used'),
+                usedLocal: clone.classList.contains('used-local'),
+                usedRemote: clone.classList.contains('used-remote'),
+                usedPrevious: clone.classList.contains('used-previous')
+            };
+
+            // Start with unused state (green border, full opacity QR)
+            clone.classList.remove('used', 'used-local', 'used-remote', 'used-previous');
 
             // Style the clone for starting position (large, centered)
             clone.style.position = 'fixed';
@@ -1642,13 +1661,20 @@ export class UIService {
             // Force a reflow to ensure the starting styles are applied
             clone.offsetHeight;
 
-            // Animate to final position
+            // Animate to final position AND final color state
             requestAnimationFrame(() => {
+                // Position/size animation
                 clone.style.top = `${finalRect.top}px`;
                 clone.style.left = `${finalRect.left}px`;
                 clone.style.width = `${finalRect.width}px`;
                 clone.style.height = `${finalRect.height}px`;
                 clone.style.transform = 'none';
+
+                // Color animation - add back the used classes
+                if (finalUsedClasses.used) clone.classList.add('used');
+                if (finalUsedClasses.usedLocal) clone.classList.add('used-local');
+                if (finalUsedClasses.usedRemote) clone.classList.add('used-remote');
+                if (finalUsedClasses.usedPrevious) clone.classList.add('used-previous');
             });
 
             // After animation completes, remove clone
