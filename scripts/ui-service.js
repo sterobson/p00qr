@@ -971,6 +971,11 @@ export class UIService {
             this.editDeleteBtn.classList.add('hidden');
             this.codeLabel.classList.remove('editing');
 
+            // Show "Pick a token" label in grid mode
+            this.codeLabel.textContent = 'Pick a token';
+            this.codeLabel.classList.remove('hide');
+            this.nocodeLabel.classList.add('hide');
+
             // Show history badge if we have assignments
             if (this.state.assignments.length > 0) {
                 this.historyIcon.classList.remove('hidden');
@@ -1584,14 +1589,10 @@ export class UIService {
         this.manualModeDiv.classList.add('hidden');
         this.qrModeDiv.classList.add('hidden');
 
-        // Update code label to show app name or clear it
-        this.codeLabel.textContent = '';
-        this.nocodeLabel.classList.remove('hide');
-
         // Re-render grid to update used status
         this.updateGridItemUsedStatus();
 
-        // Update UI
+        // Update UI (this will set "Pick a token" label)
         this.updateUI();
 
         // Animate and scroll to the token that was just saved
