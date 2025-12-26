@@ -167,8 +167,14 @@ export class UIService {
         // Swipe gesture support
         this.setupSwipeGestures();
 
-        // Prevent body scroll on mobile
-        document.body.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+        // Prevent body scroll on mobile, but allow scrolling in the grid container
+        document.body.addEventListener('touchmove', (e) => {
+            // Allow scrolling if the touch is within the token grid container
+            if (e.target.closest('.token-grid-container')) {
+                return; // Allow default scrolling behavior
+            }
+            e.preventDefault(); // Prevent scrolling elsewhere
+        }, { passive: false });
         window.addEventListener('resize', () => this.updateUI());
     }
 
