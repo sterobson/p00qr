@@ -14,6 +14,7 @@ export class UIService {
         // Get DOM elements
         this.positionInput = document.getElementById('position');
         this.takeNextBtn = document.getElementById('takeNextToken');
+        this.controls = document.querySelector('.controls');
         this.qrDiv = document.getElementById('qr');
         this.eventQrDiv = document.getElementById('eventQr');
         this.codeLabel = document.getElementById('code-label');
@@ -27,15 +28,23 @@ export class UIService {
         this.editCancelBtn = document.getElementById('edit-cancel-btn');
         this.editDeleteBtn = document.getElementById('edit-delete-btn');
 
+        // Grid view elements
+        this.tokenGridContainer = document.getElementById('token-grid-container');
+        this.tokenGrid = document.getElementById('token-grid');
+
+        // Virtual scrolling state
+        this.renderedTokens = new Set();
+        this.maxTokenToRender = 100; // Start with rendering up to 100
+        this.qrObserver = null; // IntersectionObserver for lazy QR generation
+        this.scrollSentinel = null; // Sentinel element for infinite scroll
+        this.scrollObserver = null; // IntersectionObserver for infinite scroll
+
         // Mode elements
         this.modeSelection = document.getElementById('mode-selection');
         this.contentArea = document.getElementById('content-area');
         this.scanModeDiv = document.getElementById('scan-mode');
         this.manualModeDiv = document.getElementById('manual-mode');
         this.qrModeDiv = document.getElementById('qr-mode');
-        this.historyViewDiv = document.getElementById('history-view');
-        this.historyViewList = document.getElementById('history-view-list');
-        this.historyViewEmpty = document.getElementById('history-view-empty');
         this.saveConfirmationView = document.getElementById('save-confirmation-view');
         this.saveConfirmationToken = document.getElementById('save-confirmation-token');
 
@@ -63,12 +72,11 @@ export class UIService {
         this.updateEventQR();
         this.updateUI();
 
-        // If there's a current token but no mode selected, set default mode
-        if (this.state.event.currentToken > 0 && !this.state.currentMode) {
-            const defaultMode = this.state.preferredMode || 'qr';
-            this.state.currentMode = defaultMode;
-            this.switchMode(defaultMode);
-        }
+        // Render the token grid
+        this.renderTokenGrid();
+
+        // Hide controls initially (grid mode)
+        this.controls.classList.add('hidden');
 
         document.getElementById('event-name-input').value = state.event.name;
     }
@@ -78,7 +86,7 @@ export class UIService {
         this.takeNextBtn.addEventListener('click', () => this.handleTakeNextToken());
 
         // Edit cancel button
-        this.editCancelBtn.addEventListener('click', () => this.returnToGiveTokenState());
+        this.editCancelBtn.addEventListener('click', () => this.closeTokenDetail());
 
         // Edit delete button
         this.editDeleteBtn.addEventListener('click', () => this.handleDeleteAthleteData());
@@ -124,21 +132,10 @@ export class UIService {
         // Share data
         document.getElementById('share-data').addEventListener('click', () => this.shareData());
 
-        // History icon click - show inline history
+        // History icon click - open history menu
         this.historyIcon.addEventListener('click', () => {
-            // Save current token before showing history
-            const currentToken = this.state.event.currentToken;
-            if (currentToken > 0) {
-                // Check if we need to save an empty assignment
-                const existingAssignment = this.state.assignments.find(
-                    a => a.token === currentToken && a.isLocal
-                );
-                if (!existingAssignment) {
-                    // Save empty assignment for QR mode or if no data entered
-                    this.saveAssignment('', '');
-                }
-            }
-            this.returnToGiveTokenState();
+            document.getElementById('history-menu').classList.add('open');
+            document.getElementById('menu').classList.add('open');
         });
 
         // History close button click - show options
@@ -181,7 +178,16 @@ export class UIService {
             document.getElementById('event-name-input').value = newValue;
         });
         this.watch(() => this.state.event.currentToken, () => this.updateUI());
-        this.watch(() => this.state.event.nextToken, () => this.updateUI());
+        this.watch(() => this.state.event.nextToken, () => {
+            this.updateUI();
+            this.updateGridItemUsedStatus();
+            // Scroll to the new next token if we're in grid view
+            if (this.state.event.currentToken === 0 && !this.tokenGridContainer.classList.contains('hidden')) {
+                requestAnimationFrame(() => {
+                    this.scrollToHighestToken();
+                });
+            }
+        });
         this.watch(() => this.eventSettingsMenu.classList.contains('open'), (isOpen) => {
             if(!isOpen) {
                 this.positionInput.value = '';
@@ -192,6 +198,7 @@ export class UIService {
             this.renderHistory();
             this.renderHistorySummary();
             this.renderInlineHistory();
+            this.updateGridItemUsedStatus();
         });
         this.watch(() => this.state.connectionId, () => {
             this.updateEventQR();
@@ -263,6 +270,12 @@ export class UIService {
     }
 
     handleTakeNextToken() {
+        // If in detail modal mode (button says "Done"), close the modal
+        if (this.takeNextBtn.textContent === 'Done') {
+            this.closeTokenDetail();
+            return;
+        }
+
         // If showing save confirmation, advance to next token
         if (this.showingSaveConfirmation) {
             this.advanceToNextTokenFromConfirmation();
@@ -366,40 +379,9 @@ export class UIService {
             return;
         }
 
-        // If editing an existing token, cancel just returns to give token state
-        if (this.state.isEditingExisting) {
-            this.returnToGiveTokenState();
-            return;
-        }
-
-        const val = this.state.event.nextToken > 0 ? this.state.event.nextToken : 1;
-        const clampedVal = Math.min(val, 9999);
-
-        // Disable and fade button
-        this.disableAndFadeButton();
-
-        // Animate from history view to new token
-        this.animateFromHistory(() => {
-            this.state.event.currentToken = clampedVal;
-            this.state.isEditingExisting = false;
-            console.log(`Taking next token: P${this.pad(clampedVal)}`);
-            this.signalR.sendTokenUsed(clampedVal);
-
-            // Clear athlete inputs for fresh start
-            this.athleteBarcodeInput.value = '';
-            this.athleteNameInput.value = '';
-            this.scannedData = null;
-
-            // Set mode to preferred or default to qr
-            const mode = this.state.preferredMode || 'qr';
-            this.state.currentMode = mode;
-            this.switchMode(mode);
-
-            // If QR mode, save the assignment immediately (with empty athlete data)
-            if (mode === 'qr') {
-                this.saveAssignment('', '');
-            }
-        });
+        // In grid mode, this shouldn't be called without a current token
+        // Just do nothing
+        console.log('handleTakeNextToken called without current token in grid mode');
     }
 
     switchMode(mode, prefillData = null) {
@@ -498,45 +480,9 @@ export class UIService {
     }
 
     animateFromHistory(callback) {
-        // Set transitioning flag and show loading spinner in header
-        this.isTokenTransitioning = true;
-        this.codeLabel.innerHTML = '<span class="spinner">⏳</span>';
-        this.codeLabel.classList.remove('hide');
-        this.nocodeLabel.classList.add('hide');
-
-        // Slide out history view to the right (0.5s)
-        this.historyViewDiv.classList.add('sliding-out');
-
-        // After sliding out, content is off screen - update it
-        setTimeout(() => {
-            this.historyViewDiv.classList.remove('sliding-out');
-            this.historyViewDiv.classList.add('hidden');
-
-            // Execute the callback to update token and content
-            if (callback) callback();
-
-            // Update UI to show mode selection and content
-            this.updateUI();
-
-            // Get the mode div for new token
-            const mode = this.state.currentMode;
-            let modeDiv;
-            if (mode === 'qr') modeDiv = this.qrModeDiv;
-            else if (mode === 'manual') modeDiv = this.manualModeDiv;
-            else if (mode === 'scan') modeDiv = this.scanModeDiv;
-
-            // Position new content off screen to the left
-            modeDiv.classList.add('sliding-in');
-
-            // Slide in from the left (0.5s)
-            setTimeout(() => {
-                modeDiv.classList.remove('sliding-in');
-                this.isTokenTransitioning = false;
-
-                // Update header with new token number
-                this.codeLabel.textContent = `P${this.pad(this.state.event.currentToken)}`;
-            }, 500);
-        }, 500);
+        // No longer needed with grid view - tokens are opened directly from grid
+        // Just execute the callback if provided
+        if (callback) callback();
     }
 
     updateModeContent() {
@@ -653,36 +599,8 @@ export class UIService {
     }
 
     animateToHistory() {
-        // Get current mode div
-        const currentMode = this.state.currentMode;
-        let currentModeDiv;
-        if (currentMode === 'qr') currentModeDiv = this.qrModeDiv;
-        else if (currentMode === 'manual') currentModeDiv = this.manualModeDiv;
-        else if (currentMode === 'scan') currentModeDiv = this.scanModeDiv;
-
-        // Slide out to the right (0.5s)
-        currentModeDiv.classList.add('sliding-out');
-
-        // After sliding out, show history
-        setTimeout(() => {
-            currentModeDiv.classList.remove('sliding-out');
-
-            // Clear token state and show history
-            this.state.event.currentToken = 0;
-            this.state.currentMode = null;
-            this.state.isEditingExisting = false;
-            this.barcodeService.stopReadBarcode();
-
-            // Update UI will show history view
-            this.updateUI();
-
-            // Slide in history from the left
-            this.historyViewDiv.classList.add('sliding-in');
-
-            setTimeout(() => {
-                this.historyViewDiv.classList.remove('sliding-in');
-            }, 500);
-        }, 500);
+        // No longer needed with grid view - just close the modal
+        this.closeTokenDetail();
     }
 
     startScanning() {
@@ -732,7 +650,7 @@ export class UIService {
         // Skip duplicate check if barcode is empty (QR mode)
         if (!athleteBarcode) {
             this.saveAssignment(athleteBarcode, athleteName);
-            this.animateToSaveConfirmation();
+            this.closeTokenDetail();
             return;
         }
 
@@ -750,7 +668,7 @@ export class UIService {
                 () => {
                     // User confirmed - save anyway
                     this.saveAssignment(athleteBarcode, athleteName);
-                    this.animateToSaveConfirmation();
+                    this.closeTokenDetail();
                 },
                 () => {
                     // User cancelled - do nothing, stay on current screen
@@ -759,7 +677,7 @@ export class UIService {
         } else {
             // No duplicate - save immediately
             this.saveAssignment(athleteBarcode, athleteName);
-            this.animateToSaveConfirmation();
+            this.closeTokenDetail();
         }
     }
 
@@ -838,57 +756,9 @@ export class UIService {
     }
 
     handleCloseHistory() {
-        // Find the most recent local assignment (the last token this user created)
-        const localAssignments = this.state.assignments
-            .filter(a => a.isLocal)
-            .sort((a, b) => b.token - a.token);
-
-        const mostRecentToken = localAssignments.length > 0 ? localAssignments[0].token : null;
-
-        if (mostRecentToken) {
-            // Show options: resume last token or create next token
-            const modalElements = {
-                modal: document.getElementById('modal'),
-                text: document.getElementById('confirm-text'),
-                icon: document.getElementById('confirm-icon'),
-                confirmBtn: document.getElementById('confirm-button-1'),
-                cancelBtn: document.getElementById('confirm-button-2'),
-            };
-
-            modalElements.text.textContent = `Resume P${this.pad(mostRecentToken)} or create next token?`;
-            modalElements.icon.textContent = '❔';
-            modalElements.confirmBtn.textContent = `Resume P${this.pad(mostRecentToken)}`;
-            modalElements.cancelBtn.textContent = 'Next token';
-            modalElements.modal.classList.remove('hidden');
-
-            const resumeClick = () => {
-                modalElements.confirmBtn.removeEventListener('click', resumeClick);
-                modalElements.cancelBtn.removeEventListener('click', nextClick);
-                modalElements.confirmBtn.textContent = 'Yes';
-                modalElements.cancelBtn.textContent = 'Cancel';
-                modalElements.modal.classList.add('hidden');
-
-                // Resume the most recent token
-                this.editHistoryToken(mostRecentToken);
-            };
-
-            const nextClick = () => {
-                modalElements.confirmBtn.removeEventListener('click', resumeClick);
-                modalElements.cancelBtn.removeEventListener('click', nextClick);
-                modalElements.confirmBtn.textContent = 'Yes';
-                modalElements.cancelBtn.textContent = 'Cancel';
-                modalElements.modal.classList.add('hidden');
-
-                // Create next token
-                this.handleTakeNextToken();
-            };
-
-            modalElements.confirmBtn.addEventListener('click', resumeClick);
-            modalElements.cancelBtn.addEventListener('click', nextClick);
-        } else {
-            // No assignments yet - just take next token
-            this.handleTakeNextToken();
-        }
+        // In grid view, just close the history menu
+        document.getElementById('history-menu').classList.remove('open');
+        document.getElementById('menu').classList.remove('open');
     }
 
     handleDeleteAthleteData() {
@@ -898,8 +768,8 @@ export class UIService {
             () => {
                 // User confirmed - clear athlete data from the assignment
                 this.saveAssignment('', '');
-                // Return to history view
-                this.animateToHistory();
+                // Close modal and return to grid
+                this.closeTokenDetail();
             },
             () => {
                 // User cancelled - do nothing
@@ -974,46 +844,8 @@ export class UIService {
     }
 
     renderInlineHistory() {
-        // Show all assignments (everyone's tokens)
-        // Sort by token number (descending - highest first)
-        const sorted = [...this.state.assignments].sort((a, b) => b.token - a.token);
-
-        if (sorted.length === 0) {
-            this.historyViewEmpty.classList.remove('hidden');
-            this.historyViewList.innerHTML = '';
-            return;
-        }
-
-        this.historyViewEmpty.classList.add('hidden');
-        this.historyViewList.innerHTML = sorted.map(assignment => {
-            const tokenLabel = `P${this.pad(assignment.token)}`;
-            const athleteInfo = assignment.athleteName
-                ? `${assignment.athleteBarcode} (${assignment.athleteName})`
-                : assignment.athleteBarcode || '[Empty]';
-
-            const createdByLabel = assignment.isLocal ? '<div class="history-created-by">Created by you</div>' : '';
-
-            return `
-                <div class="history-item" data-token="${assignment.token}">
-                    <div class="history-info">
-                        <div class="history-token">${tokenLabel}</div>
-                        <div class="history-athlete">${athleteInfo}</div>
-                        ${createdByLabel}
-                    </div>
-                    <svg class="history-edit-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-                        <path d="M421.7 220.3L188.5 453.4L154.6 419.5L158.1 416H112C103.2 416 96 408.8 96 400V353.9L92.51 357.4C87.78 362.2 84.31 368 82.42 374.4L59.44 452.6C56.46 463.1 61.86 474.5 72.33 477.5C73.94 477.1 75.58 478.2 77.2 478.2C84.66 478.2 91.76 474.3 95.62 467.4L137.2 390.5L84.84 338.2C70.28 323.6 70.28 299.9 84.84 285.3L314.1 56.08C328.7 41.51 352.4 41.51 366.1 56.08L456.9 146.9C471.5 161.5 471.5 185.2 456.9 199.7L421.7 220.3zM492.7 58.75C519.8 85.88 519.8 129.1 492.7 156.1L411.7 237.1L274.9 100.3L355.9 19.27C382.1-7.85 426.1-7.85 453.3 19.27L492.7 58.75z"/>
-                    </svg>
-                </div>
-            `;
-        }).join('');
-
-        // Add click handlers to history items
-        this.historyViewList.querySelectorAll('.history-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const token = parseInt(item.getAttribute('data-token'));
-                this.editHistoryToken(token);
-            });
-        });
+        // No longer needed with grid view - history is shown in the grid itself
+        // Keep method to avoid breaking watchers that call it
     }
 
     editHistoryToken(token) {
@@ -1021,30 +853,8 @@ export class UIService {
         document.getElementById('history-menu').classList.remove('open');
         document.getElementById('menu').classList.remove('open');
 
-        // Set the current token to the selected one (editing existing, not creating new)
-        this.state.event.currentToken = token;
-        this.state.isEditingExisting = true;
-
-        // Get the existing assignment
-        const existingAssignment = this.state.assignments.find(a => a.token === token);
-
-        // Determine which mode to use
-        let mode;
-        if (existingAssignment?.entryMethod) {
-            // Use stored entry method if available
-            mode = existingAssignment.entryMethod;
-        } else if (existingAssignment && !existingAssignment.athleteBarcode) {
-            // No athlete barcode means it was QR mode
-            mode = 'qr';
-        } else {
-            // Has athlete barcode but no stored method - default to manual for editing
-            mode = 'manual';
-        }
-
-        this.state.currentMode = mode;
-
-        // Pass the existing data to switchMode for pre-filling
-        this.switchMode(mode, existingAssignment);
+        // Open the token detail using the grid's method
+        this.openTokenDetail(token);
     }
 
     updateUI() {
@@ -1058,7 +868,7 @@ export class UIService {
             this.historyBadge.classList.add('hidden');
             this.historyCloseBtn.classList.add('hidden');
             this.takeNextBtn.style.display = 'flex';
-            this.takeNextBtn.textContent = 'Next token';
+            this.takeNextBtn.textContent = 'Done';
 
             // Disable mode selection buttons
             this.modeScanBtn.disabled = true;
@@ -1073,12 +883,7 @@ export class UIService {
         this.modeQrBtn.disabled = false;
 
         if (hasCurrentToken) {
-            // Show mode selection and content area
-            this.modeSelection.classList.remove('hidden');
-            this.contentArea.classList.remove('hidden');
-            this.historyViewDiv.classList.add('hidden'); // Hide history view when working with a token
-
-            // Show history button with badge, hide close button
+            // In modal mode - update UI for token detail view
             this.historyCloseBtn.classList.add('hidden');
             if (this.state.assignments.length > 0) {
                 this.historyIcon.classList.remove('hidden');
@@ -1108,40 +913,31 @@ export class UIService {
                 }
 
                 this.takeNextBtn.style.display = 'flex';
-                this.takeNextBtn.textContent = 'Next token';
+                this.takeNextBtn.textContent = 'Done';
             }
-            // Not editing - show "Next token" button for all modes
+            // Not editing - show "Done" button
             else {
                 this.editCancelBtn.classList.add('hidden');
                 this.editDeleteBtn.classList.add('hidden');
                 this.codeLabel.classList.remove('editing');
                 this.takeNextBtn.style.display = 'flex';
-                this.takeNextBtn.textContent = 'Next token';
+                this.takeNextBtn.textContent = 'Done';
             }
         } else {
-            // No current token - show history view
+            // No current token - grid view mode
             this.editCancelBtn.classList.add('hidden');
             this.editDeleteBtn.classList.add('hidden');
             this.codeLabel.classList.remove('editing');
-            this.modeSelection.classList.add('hidden');
-            this.scanModeDiv.classList.add('hidden');
-            this.manualModeDiv.classList.add('hidden');
-            this.qrModeDiv.classList.add('hidden');
 
-            // Show "History" in the code label area
-            this.codeLabel.textContent = 'History';
-            this.codeLabel.classList.remove('hide');
-            this.nocodeLabel.classList.add('hide');
-
-            // Hide the history button (with badge), show close button only
-            this.historyIcon.classList.add('hidden');
-            this.historyBadge.classList.add('hidden');
-            this.historyCloseBtn.classList.remove('hidden');
-
-            // Show history view in the content area
-            this.contentArea.classList.remove('hidden');
-            this.historyViewDiv.classList.remove('hidden');
-            this.renderInlineHistory();
+            // Show history badge if we have assignments
+            if (this.state.assignments.length > 0) {
+                this.historyIcon.classList.remove('hidden');
+                this.historyBadge.classList.remove('hidden');
+            } else {
+                this.historyIcon.classList.add('hidden');
+                this.historyBadge.classList.add('hidden');
+            }
+            this.historyCloseBtn.classList.add('hidden');
 
             const nextToken = this.state.event.nextToken;
             if (nextToken === 0) {
@@ -1433,5 +1229,429 @@ export class UIService {
 
         if(modalElements.confirmBtn) modalElements.confirmBtn.addEventListener('click', button1Click);
         if(modalElements.cancelBtn) modalElements.cancelBtn.addEventListener('click', button2Click);
+    }
+
+    // Grid view methods
+    renderTokenGrid() {
+        const highestToken = this.getHighestUsedToken();
+        const nextToken = this.state.event.nextToken || 1;
+        const maxToken = Math.max(highestToken + 20, nextToken + 20, this.maxTokenToRender);
+
+        // Clear existing grid
+        this.tokenGrid.innerHTML = '';
+        this.renderedTokens.clear();
+
+        // Set up intersection observer for lazy QR generation
+        if (this.qrObserver) {
+            this.qrObserver.disconnect();
+        }
+
+        this.qrObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const tokenDiv = entry.target;
+                    this.generateQRForToken(tokenDiv);
+                    this.qrObserver.unobserve(tokenDiv);
+                }
+            });
+        }, {
+            root: this.tokenGridContainer,
+            rootMargin: '200px'
+        });
+
+        // Set up infinite scroll observer
+        if (this.scrollObserver) {
+            this.scrollObserver.disconnect();
+        }
+
+        this.scrollObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // Load more tokens when sentinel is visible
+                    this.loadMoreTokens();
+                }
+            });
+        }, {
+            root: this.tokenGridContainer,
+            rootMargin: '500px'
+        });
+
+        // Render tokens from 1 to maxToken
+        for (let i = 1; i <= maxToken; i++) {
+            this.renderGridToken(i);
+        }
+
+        // Add scroll sentinel for infinite loading
+        this.addScrollSentinel();
+
+        // Scroll to show row containing highest token
+        requestAnimationFrame(() => {
+            this.scrollToHighestToken();
+        });
+    }
+
+    loadMoreTokens() {
+        // Add 50 more tokens (up to 9999)
+        const currentMax = this.maxTokenToRender;
+        this.maxTokenToRender = Math.min(currentMax + 50, 9999);
+
+        for (let i = currentMax + 1; i <= this.maxTokenToRender; i++) {
+            this.renderGridToken(i);
+        }
+
+        // Move sentinel to end (unless we hit max)
+        if (this.scrollSentinel && this.scrollSentinel.parentNode) {
+            if (this.maxTokenToRender < 9999) {
+                // Unobserve before moving
+                this.scrollObserver.unobserve(this.scrollSentinel);
+                // Move to end
+                this.tokenGrid.appendChild(this.scrollSentinel);
+                // Re-observe after moving
+                this.scrollObserver.observe(this.scrollSentinel);
+            } else {
+                // We've reached the max, remove sentinel
+                this.scrollObserver.unobserve(this.scrollSentinel);
+                this.scrollSentinel.remove();
+            }
+        }
+    }
+
+    addScrollSentinel() {
+        // Remove existing sentinel
+        if (this.scrollSentinel && this.scrollSentinel.parentNode) {
+            this.scrollSentinel.remove();
+        }
+
+        // Create new sentinel
+        this.scrollSentinel = document.createElement('div');
+        this.scrollSentinel.className = 'scroll-sentinel';
+        this.scrollSentinel.style.height = '1px';
+        this.scrollSentinel.style.width = '100%';
+        this.tokenGrid.appendChild(this.scrollSentinel);
+
+        // Observe sentinel
+        this.scrollObserver.observe(this.scrollSentinel);
+    }
+
+    renderGridToken(tokenNum) {
+        if (this.renderedTokens.has(tokenNum)) return;
+
+        const tokenDiv = document.createElement('div');
+        tokenDiv.className = 'token-grid-item';
+        tokenDiv.dataset.token = tokenNum;
+
+        // Check if token is used and by whom
+        const assignment = this.state.assignments.find(a => a.token === tokenNum);
+        const nextToken = this.state.event.nextToken || 1;
+        const isPrevious = tokenNum < nextToken;
+
+        if (assignment) {
+            tokenDiv.classList.add('used');
+            if (assignment.isLocal) {
+                tokenDiv.classList.add('used-local');
+            } else {
+                tokenDiv.classList.add('used-remote');
+            }
+        } else if (isPrevious) {
+            // Previous token without assignment - gray border
+            tokenDiv.classList.add('used');
+            tokenDiv.classList.add('used-previous');
+        }
+
+        // Create QR code container (empty for now, will be filled by observer)
+        const qrContainer = document.createElement('div');
+        qrContainer.className = 'token-qr';
+
+        // Create position number overlay
+        const numberDiv = document.createElement('div');
+        numberDiv.className = 'token-number';
+        numberDiv.textContent = `P${this.pad(tokenNum)}`;
+
+        tokenDiv.appendChild(qrContainer);
+        tokenDiv.appendChild(numberDiv);
+
+        // Add click handler
+        tokenDiv.addEventListener('click', () => this.openTokenDetail(tokenNum));
+
+        this.tokenGrid.appendChild(tokenDiv);
+        this.renderedTokens.add(tokenNum);
+
+        // Observe for lazy QR generation
+        this.qrObserver.observe(tokenDiv);
+    }
+
+    generateQRForToken(tokenDiv) {
+        const tokenNum = parseInt(tokenDiv.dataset.token);
+        const qrContainer = tokenDiv.querySelector('.token-qr');
+
+        // Generate QR code
+        const qrText = `P${this.pad(tokenNum)}`;
+        const size = 150; // Fixed size for grid items
+        if (window.QRCode && qrContainer.children.length === 0) {
+            new QRCode(qrContainer, {
+                text: qrText,
+                width: size,
+                height: size,
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+    }
+
+    getHighestUsedToken() {
+        if (this.state.assignments.length === 0) return 0;
+        return Math.max(...this.state.assignments.map(a => a.token));
+    }
+
+    scrollToHighestToken() {
+        // Scroll to show the next token that should be used
+        const nextToken = this.state.event.nextToken || 1;
+
+        const tokenElement = this.tokenGrid.querySelector(`[data-token="${nextToken}"]`);
+        if (tokenElement) {
+            tokenElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    openTokenDetail(tokenNum) {
+        // Set current token
+        this.state.event.currentToken = tokenNum;
+
+        // Check if token already has an assignment
+        const existingAssignment = this.state.assignments.find(a => a.token === tokenNum);
+
+        if (existingAssignment) {
+            this.state.isEditingExisting = true;
+
+            // Determine which mode to use
+            let mode;
+            if (existingAssignment?.entryMethod) {
+                mode = existingAssignment.entryMethod;
+            } else if (!existingAssignment.athleteBarcode) {
+                mode = 'qr';
+            } else {
+                mode = 'manual';
+            }
+
+            this.state.currentMode = mode;
+            this.switchMode(mode, existingAssignment);
+        } else {
+            // New token - use preferred mode
+            this.state.isEditingExisting = false;
+            const mode = this.state.preferredMode || 'qr';
+            this.state.currentMode = mode;
+            this.switchMode(mode);
+
+            // Clear athlete inputs
+            this.athleteBarcodeInput.value = '';
+            this.athleteNameInput.value = '';
+            this.scannedData = null;
+        }
+
+        // Update code label
+        this.codeLabel.textContent = `P${this.pad(tokenNum)}`;
+        this.codeLabel.classList.remove('hide');
+        this.nocodeLabel.classList.add('hide');
+
+        // Update button text
+        this.takeNextBtn.textContent = 'Done';
+
+        // Hide grid, show mode selection and content area
+        this.tokenGridContainer.classList.add('hidden');
+        this.modeSelection.classList.remove('hidden');
+        this.contentArea.classList.remove('hidden');
+
+        // Show controls
+        this.controls.classList.remove('hidden');
+
+        // Update UI
+        this.updateUI();
+    }
+
+    closeTokenDetail() {
+        // Save current token if needed
+        const currentToken = this.state.event.currentToken;
+        if (currentToken > 0) {
+            const existingAssignment = this.state.assignments.find(
+                a => a.token === currentToken && a.isLocal
+            );
+
+            // If in QR mode and no assignment exists, create empty assignment
+            if (this.state.currentMode === 'qr' && !existingAssignment) {
+                this.saveAssignment('', '');
+            }
+
+            // If in manual/scan mode with unsaved data, warn user
+            if (this.state.currentMode === 'manual' || this.state.currentMode === 'scan') {
+                const barcode = this.athleteBarcodeInput.value.trim();
+                const name = this.athleteNameInput.value.trim();
+                const hasScannedData = this.scannedData ? true : false;
+                const hasAthleteInAssignment = existingAssignment && existingAssignment.athleteBarcode;
+
+                if ((barcode || name || hasScannedData) && !hasAthleteInAssignment) {
+                    this.confirm(
+                        `You have unsaved athlete data for P${this.pad(currentToken)}. Discard changes?`,
+                        '⚠️',
+                        () => {
+                            this.completeCloseTokenDetail();
+                        },
+                        () => {
+                            // User cancelled - stay in modal
+                        }
+                    );
+                    return;
+                }
+            }
+        }
+
+        this.completeCloseTokenDetail();
+    }
+
+    completeCloseTokenDetail() {
+        // Save the token number before resetting
+        const savedTokenNum = this.state.event.currentToken;
+
+        // Reset state
+        this.state.event.currentToken = 0;
+        this.state.currentMode = null;
+        this.state.isEditingExisting = false;
+        this.showingSaveConfirmation = false;
+        this.scannedDataBeforeEdit = null;
+        this.userEditedAfterScan = false;
+
+        // Stop any active scanning
+        this.barcodeService.stopReadBarcode();
+
+        // Clear athlete inputs
+        this.athleteBarcodeInput.value = '';
+        this.athleteNameInput.value = '';
+        this.scannedData = null;
+
+        // Update button text
+        this.takeNextBtn.textContent = 'Next token';
+
+        // Show grid, hide mode selection and content area
+        this.tokenGridContainer.classList.remove('hidden');
+        this.modeSelection.classList.add('hidden');
+        this.contentArea.classList.add('hidden');
+
+        // Hide controls
+        this.controls.classList.add('hidden');
+
+        // Hide all mode content divs
+        this.scanModeDiv.classList.add('hidden');
+        this.manualModeDiv.classList.add('hidden');
+        this.qrModeDiv.classList.add('hidden');
+
+        // Update code label to show app name or clear it
+        this.codeLabel.textContent = '';
+        this.nocodeLabel.classList.remove('hide');
+
+        // Re-render grid to update used status
+        this.updateGridItemUsedStatus();
+
+        // Update UI
+        this.updateUI();
+
+        // Animate and scroll to the token that was just saved
+        if (savedTokenNum > 0) {
+            // Small delay to ensure grid is visible first
+            requestAnimationFrame(() => {
+                this.animateAndScrollToToken(savedTokenNum);
+            });
+        }
+    }
+
+    updateGridItemUsedStatus() {
+        // Update all grid items to reflect used/unused state
+        const nextToken = this.state.event.nextToken || 1;
+
+        this.tokenGrid.querySelectorAll('.token-grid-item').forEach(item => {
+            const tokenNum = parseInt(item.dataset.token);
+            const assignment = this.state.assignments.find(a => a.token === tokenNum);
+            const isPrevious = tokenNum < nextToken;
+
+            // Remove all used classes first
+            item.classList.remove('used', 'used-local', 'used-remote', 'used-previous');
+
+            if (assignment) {
+                item.classList.add('used');
+                if (assignment.isLocal) {
+                    item.classList.add('used-local');
+                } else {
+                    item.classList.add('used-remote');
+                }
+            } else if (isPrevious) {
+                // Previous token without assignment - gray border
+                item.classList.add('used');
+                item.classList.add('used-previous');
+            }
+        });
+    }
+
+    animateAndScrollToToken(tokenNum) {
+        // Find the token element
+        const tokenElement = this.tokenGrid.querySelector(`[data-token="${tokenNum}"]`);
+        if (!tokenElement) return;
+
+        // Check if token is already fully in view
+        const rect = tokenElement.getBoundingClientRect();
+        const containerRect = this.tokenGridContainer.getBoundingClientRect();
+        const isFullyVisible = (
+            rect.top >= containerRect.top &&
+            rect.bottom <= containerRect.bottom &&
+            rect.left >= containerRect.left &&
+            rect.right <= containerRect.right
+        );
+
+        // Only scroll if not fully visible
+        if (!isFullyVisible) {
+            tokenElement.scrollIntoView({
+                behavior: 'instant',
+                block: 'center'
+            });
+        }
+
+        // Wait a tiny bit for scroll to complete (if it happened), then start animation
+        requestAnimationFrame(() => {
+            // Get the final position of the token after scrolling
+            const finalRect = tokenElement.getBoundingClientRect();
+
+            // Clone the token element for animation
+            const clone = tokenElement.cloneNode(true);
+            clone.classList.remove('used', 'used-local', 'used-remote');
+
+            // Style the clone for starting position (large, centered)
+            clone.style.position = 'fixed';
+            clone.style.top = '50%';
+            clone.style.left = '50%';
+            clone.style.width = '80vmin';
+            clone.style.height = '80vmin';
+            clone.style.transform = 'translate(-50%, -50%)';
+            clone.style.zIndex = '2000';
+            clone.style.transition = 'all 1s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+            // Add clone to body
+            document.body.appendChild(clone);
+
+            // Force a reflow to ensure the starting styles are applied
+            clone.offsetHeight;
+
+            // Animate to final position
+            requestAnimationFrame(() => {
+                clone.style.top = `${finalRect.top}px`;
+                clone.style.left = `${finalRect.left}px`;
+                clone.style.width = `${finalRect.width}px`;
+                clone.style.height = `${finalRect.height}px`;
+                clone.style.transform = 'none';
+            });
+
+            // After animation completes, remove clone
+            setTimeout(() => {
+                clone.remove();
+
+                // Update the real element's classes
+                this.updateGridItemUsedStatus();
+            }, 1000);
+        });
     }
 }

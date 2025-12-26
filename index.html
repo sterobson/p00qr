@@ -36,6 +36,11 @@
             </button>
         </div>
 
+        <!-- Token grid view -->
+        <div id="token-grid-container" class="token-grid-container">
+            <div id="token-grid" class="token-grid"></div>
+        </div>
+
         <!-- Mode selection buttons -->
         <div id="mode-selection" class="mode-selection hidden">
             <button id="mode-qr" class="mode-button" data-mode="qr" title="Show QR code">
@@ -59,7 +64,7 @@
         </div>
 
         <!-- Content area for different modes -->
-        <div id="content-area" class="content-area">
+        <div id="content-area" class="content-area hidden">
             <!-- Edit cancel button (floats in top-right of content area) -->
             <button id="edit-cancel-btn" class="edit-cancel-btn hidden" title="Cancel editing">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
@@ -99,12 +104,6 @@
             <div id="qr-mode" class="mode-content hidden">
                 <div id="qr"></div>
                 <p class="qr-instructions">Please take the athlete's barcode to be scanned, then scan this position token.</p>
-            </div>
-
-            <!-- History view mode -->
-            <div id="history-view" class="mode-content hidden">
-                <p id="history-view-empty" class="history-message hidden">No assignments yet</p>
-                <div id="history-view-list"></div>
             </div>
 
             <!-- Save confirmation view -->
@@ -249,9 +248,7 @@
         </div>
     </div>
 
-    <div class="connection-state-disconnected hidden">
-        Not connected
-    </div>
+    <div class="connection-state-disconnected hidden" title="Disconnected"></div>
 
     <!-- Environment selection modal (only shown on localhost) -->
     <div id="env-select-modal" class="modal-backdrop hidden">

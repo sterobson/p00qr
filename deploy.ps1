@@ -11,7 +11,7 @@ function Write-Gray($message) { Write-Host $message -ForegroundColor Gray }
 # Configuration
 $config = @{
     Frontend = @{
-        Url = "https://sterobson.github.io/parkrunPositionQrCode/"
+        Url = "https://sterobson.github.io/p00qr/"
     }
     Backend = @{
         AppName = "sterobson-personal"
