@@ -71,7 +71,7 @@ if ($deployFrontend) {
 
     # Update version number
     Write-Info "Updating version number..."
-    $versionFile = Join-Path $PSScriptRoot "version.json"
+    $versionFile = Join-Path $PSScriptRoot "Frontend\version.json"
     $now = Get-Date
     $today = $now.ToString("yyyy.MM.dd")
     $deploymentNumber = 1
@@ -113,9 +113,9 @@ if ($deployFrontend) {
     # Check if there are uncommitted changes in frontend files
     $gitStatus = git status --porcelain
     $frontendChanges = $gitStatus | Where-Object {
-        $_ -match '^\s*M.*\.(html|css|js|svg|json)$' -or
-        $_ -match '^\s*M.*scripts/' -or
-        $_ -match '^\s*M.*public/'
+        $_ -match '^\s*M.*Frontend/.*\.(html|css|js|svg|json)$' -or
+        $_ -match '^\s*M.*Frontend/scripts/' -or
+        $_ -match '^\s*M.*Frontend/public/'
     }
 
     if ($frontendChanges) {
@@ -123,7 +123,7 @@ if ($deployFrontend) {
         Write-Info "Automatically committing and pushing to main branch..."
 
         # Add all frontend-related changes including version.json
-        git add index.html styles.css favicon.svg scripts/ public/ version.json 2>&1 | Out-Null
+        git add Frontend/index.html Frontend/styles.css Frontend/favicon.svg Frontend/scripts/ Frontend/public/ Frontend/version.json 2>&1 | Out-Null
 
         # Commit with timestamp
         $commitMessage = "Deploy frontend changes - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
@@ -190,18 +190,19 @@ if ($deployFrontend) {
 
                     # Copy specific frontend files and directories
                     $itemsToCopy = @(
-                        "index.html",
-                        "styles.css",
-                        "favicon.svg",
-                        "version.json",
-                        "scripts",
-                        "public"
+                        "Frontend\index.html",
+                        "Frontend\styles.css",
+                        "Frontend\favicon.svg",
+                        "Frontend\version.json",
+                        "Frontend\scripts",
+                        "Frontend\public"
                     )
 
                     foreach ($item in $itemsToCopy) {
                         $sourcePath = Join-Path $sourceRoot $item
+                        $itemName = Split-Path $item -Leaf
                         if (Test-Path $sourcePath) {
-                            Copy-Item -Path $sourcePath -Destination $worktreePath -Recurse -Force
+                            Copy-Item -Path $sourcePath -Destination (Join-Path $worktreePath $itemName) -Recurse -Force
                         } else {
                             Write-Gray "  Skipping $item (not found)"
                         }
