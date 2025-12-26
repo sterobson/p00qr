@@ -157,7 +157,7 @@ if ($Environment -eq "local" -and $Backend) {
 
     # Build the backend
     Write-Info "Building Azure Functions..."
-    $backendPath = Join-Path $PSScriptRoot $selectedConfig.production.Backend.ProjectPath
+    $backendPath = Join-Path $PSScriptRoot $config.production.Backend.ProjectPath
     Push-Location $backendPath
     try {
         dotnet build --nologo --verbosity quiet
