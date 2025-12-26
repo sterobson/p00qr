@@ -594,6 +594,37 @@ aside.open {
     }
 }
 
+/* Token detail view */
+.token-detail-view {
+    flex: 1;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 1rem;
+    position: relative;
+    overflow-y: auto;
+}
+
+.done-button {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: #2e2966;
+    color: white;
+    border: none;
+    padding: 0.5rem 1.5rem;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    cursor: pointer;
+    z-index: 10;
+
+    &:hover {
+        background: #1e1956;
+    }
+}
+
 /* Content area */
 .content-area {
     flex: 1;

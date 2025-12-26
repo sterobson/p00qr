@@ -9,9 +9,6 @@
         @click="$emit('token-click', token)"
       >
         <div class="token-number">P{{ String(token).padStart(4, '0') }}</div>
-        <div v-if="getAssignment(token)" class="token-athlete">
-          {{ getAssignment(token).athleteBarcode }}
-        </div>
         <div v-if="!getAssignment(token)" class="token-placeholder">
           Pick a token
         </div>
@@ -71,8 +68,10 @@ const generateQRCodes = () => {
   nextTick(() => {
     store.assignments.forEach(assignment => {
       const element = qrRefs.value.get(assignment.token)
-      if (element && element.children.length === 0) {
+      if (element) {
         const qrData = `P${String(assignment.token).padStart(4, '0')}${assignment.athleteBarcode ? ',' + assignment.athleteBarcode : ''}`
+        // Clear and regenerate to ensure QR code is always displayed
+        element.innerHTML = ''
         generateQRCode(element, qrData, 128)
       }
     })
