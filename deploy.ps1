@@ -69,6 +69,47 @@ if ($deployFrontend) {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
+    # Update version number
+    Write-Info "Updating version number..."
+    $versionFile = Join-Path $PSScriptRoot "version.json"
+    $today = Get-Date -Format "yyyy.MM.dd"
+    $currentVersion = "2025.12.26-01"
+    $deploymentNumber = 1
+
+    if (Test-Path $versionFile) {
+        $versionData = Get-Content $versionFile | ConvertFrom-Json
+        $currentVersion = $versionData.version
+
+        # Extract date and number from current version
+        if ($currentVersion -match '^(\d{4}\.\d{2}\.\d{2})-(\d{2})$') {
+            $versionDate = $matches[1]
+            $versionNumber = [int]$matches[2]
+
+            if ($versionDate -eq $today) {
+                # Same day - increment number
+                $deploymentNumber = $versionNumber + 1
+            } else {
+                # New day - reset to 01
+                $deploymentNumber = 1
+            }
+        }
+    }
+
+    # Create new version string
+    $newVersion = "$today-$($deploymentNumber.ToString('00'))"
+    $buildDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+    # Update version.json
+    $versionContent = @{
+        version = $newVersion
+        buildDate = $buildDate
+        author = "Ste Robson"
+    } | ConvertTo-Json
+
+    Set-Content -Path $versionFile -Value $versionContent
+    Write-Success "Version updated to: $newVersion"
+    Write-Host ""
+
     # Check if there are uncommitted changes in frontend files
     $gitStatus = git status --porcelain
     $frontendChanges = $gitStatus | Where-Object {
@@ -81,8 +122,8 @@ if ($deployFrontend) {
         Write-Warning "Found uncommitted frontend changes."
         Write-Info "Automatically committing and pushing to main branch..."
 
-        # Add all frontend-related changes
-        git add index.html styles.css favicon.svg scripts/ public/ 2>&1 | Out-Null
+        # Add all frontend-related changes including version.json
+        git add index.html styles.css favicon.svg scripts/ public/ version.json 2>&1 | Out-Null
 
         # Commit with timestamp
         $commitMessage = "Deploy frontend changes - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
@@ -152,6 +193,7 @@ if ($deployFrontend) {
                         "index.html",
                         "styles.css",
                         "favicon.svg",
+                        "version.json",
                         "scripts",
                         "public"
                     )

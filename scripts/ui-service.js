@@ -79,6 +79,9 @@ export class UIService {
         this.controls.classList.add('hidden');
 
         document.getElementById('event-name-input').value = state.event.name;
+
+        // Load and display version information
+        this.loadVersionInfo();
     }
 
     setupListeners() {
@@ -1709,5 +1712,43 @@ export class UIService {
                 this.updateGridItemUsedStatus();
             }, 1000);
         });
+    }
+
+    async loadVersionInfo() {
+        try {
+            const response = await fetch('./version.json');
+            const versionData = await response.json();
+
+            // Update version display
+            const versionElement = document.getElementById('app-version');
+            const buildDateElement = document.getElementById('build-date');
+            const authorElement = document.getElementById('app-author');
+
+            if (versionElement) {
+                versionElement.textContent = versionData.version;
+            }
+
+            if (buildDateElement && versionData.buildDate) {
+                const buildDate = new Date(versionData.buildDate);
+                const formattedDate = buildDate.toLocaleString('en-GB', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                buildDateElement.textContent = formattedDate;
+            }
+
+            if (authorElement && versionData.author) {
+                authorElement.textContent = versionData.author;
+            }
+        } catch (error) {
+            console.error('Failed to load version info:', error);
+            const versionElement = document.getElementById('app-version');
+            if (versionElement) {
+                versionElement.textContent = 'Unknown';
+            }
+        }
     }
 }
