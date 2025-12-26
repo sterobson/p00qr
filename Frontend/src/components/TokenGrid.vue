@@ -66,6 +66,7 @@ const setQRRef = (token, el) => {
 
 const generateQRCodes = () => {
   nextTick(() => {
+    console.log(`generateQRCodes: Processing ${store.assignments.length} assignments`)
     store.assignments.forEach(assignment => {
       const element = qrRefs.value.get(assignment.token)
       if (element) {
@@ -73,6 +74,8 @@ const generateQRCodes = () => {
         // Clear and regenerate to ensure QR code is always displayed
         element.innerHTML = ''
         generateQRCode(element, qrData, 128)
+      } else {
+        console.warn(`No QR element found for token ${assignment.token}`)
       }
     })
   })

@@ -113,7 +113,7 @@ const showHistory = ref(false)
 const showAbout = ref(false)
 
 // Content area
-const showContentArea = computed(() => store.currentMode !== null)
+const showContentArea = computed(() => store.event.currentToken > 0)
 
 // Modals
 const confirmModal = ref(null)
@@ -174,6 +174,7 @@ const switchMode = (mode) => {
 const closeTokenDetail = () => {
   store.currentMode = null
   store.isEditingExisting = false
+  store.event.currentToken = 0
 }
 
 const handleTokenClick = (token) => {
@@ -220,10 +221,6 @@ const handleSaveToken = async (data) => {
     await signalR.value.sendTokenAssignments([assignment])
   }
 
-  // Show confirmation and advance to next token
-  if (!store.isEditingExisting) {
-    store.event.currentToken = 0
-  }
   closeTokenDetail()
 }
 
