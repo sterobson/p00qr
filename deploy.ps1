@@ -69,9 +69,24 @@ if ($deployFrontend) {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
+    # Build Vue app
+    Write-Info "Building Vue app..."
+    Push-Location (Join-Path $PSScriptRoot "Frontend")
+    npm run build 2>&1 | Out-Null
+    Pop-Location
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Frontend build failed"
+        $deploymentSuccess = $false
+        return
+    }
+
+    Write-Success "Frontend build completed"
+    Write-Host ""
+
     # Update version number
     Write-Info "Updating version number..."
-    $versionFile = Join-Path $PSScriptRoot "Frontend\version.json"
+    $versionFile = Join-Path $PSScriptRoot "Frontend\dist\version.json"
     $now = Get-Date
     $today = $now.ToString("yyyy.MM.dd")
     $deploymentNumber = 1
@@ -110,20 +125,21 @@ if ($deployFrontend) {
     Write-Success "Version updated to: $newVersion"
     Write-Host ""
 
-    # Check if there are uncommitted changes in frontend files
+    # Check if there are uncommitted changes in frontend source files
     $gitStatus = git status --porcelain
     $frontendChanges = $gitStatus | Where-Object {
-        $_ -match '^\s*M.*Frontend/.*\.(html|css|js|svg|json)$' -or
+        $_ -match '^\s*M.*Frontend/src/' -or
+        $_ -match '^\s*M.*Frontend/.*\.(html|js|json|vue)$' -or
         $_ -match '^\s*M.*Frontend/scripts/' -or
         $_ -match '^\s*M.*Frontend/public/'
     }
 
     if ($frontendChanges) {
-        Write-Warning "Found uncommitted frontend changes."
+        Write-Warning "Found uncommitted frontend source changes."
         Write-Info "Automatically committing and pushing to main branch..."
 
-        # Add all frontend-related changes including version.json
-        git add Frontend/index.html Frontend/styles.css Frontend/favicon.svg Frontend/scripts/ Frontend/public/ Frontend/version.json 2>&1 | Out-Null
+        # Add all frontend-related source changes
+        git add Frontend/src/ Frontend/index-vue.html Frontend/vite.config.js Frontend/package.json Frontend/scripts/ Frontend/public/ 2>&1 | Out-Null
 
         # Commit with timestamp
         $commitMessage = "Deploy frontend changes - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
@@ -143,7 +159,7 @@ if ($deployFrontend) {
             Write-Warning "No changes to commit (possibly already committed)"
         }
     } else {
-        Write-Success "No uncommitted frontend changes"
+        Write-Success "No uncommitted frontend source changes"
     }
 
     if ($deploymentSuccess) {
@@ -183,29 +199,28 @@ if ($deployFrontend) {
                     Get-ChildItem -Path $worktreePath -Exclude ".git" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
                     # Copy files from main branch to worktree
-                    Write-Gray "Copying files to deployment directory..."
+                    Write-Gray "Copying built files to deployment directory..."
 
-                    # Get list of files to deploy from main branch (exclude Backend, .git, etc.)
+                    # Get list of files to deploy from the Frontend/dist directory (built by Vite)
                     $sourceRoot = $PSScriptRoot
+                    $distPath = Join-Path $sourceRoot "Frontend\dist"
 
-                    # Copy specific frontend files and directories
-                    $itemsToCopy = @(
-                        "Frontend\index.html",
-                        "Frontend\styles.css",
-                        "Frontend\favicon.svg",
-                        "Frontend\version.json",
-                        "Frontend\scripts",
-                        "Frontend\public"
-                    )
-
-                    foreach ($item in $itemsToCopy) {
-                        $sourcePath = Join-Path $sourceRoot $item
-                        $itemName = Split-Path $item -Leaf
-                        if (Test-Path $sourcePath) {
-                            Copy-Item -Path $sourcePath -Destination (Join-Path $worktreePath $itemName) -Recurse -Force
-                        } else {
-                            Write-Gray "  Skipping $item (not found)"
+                    if (Test-Path $distPath) {
+                        # Copy all files from dist directory to worktree root
+                        Get-ChildItem -Path $distPath -Recurse | ForEach-Object {
+                            $targetPath = $_.FullName.Replace($distPath, $worktreePath)
+                            if ($_.PSIsContainer) {
+                                if (-not (Test-Path $targetPath)) {
+                                    New-Item -ItemType Directory -Path $targetPath -Force | Out-Null
+                                }
+                            } else {
+                                Copy-Item -Path $_.FullName -Destination $targetPath -Force
+                            }
                         }
+                    } else {
+                        Write-Error "Dist directory not found at: $distPath"
+                        $deploymentSuccess = $false
+                        return
                     }
 
                     # Add .nojekyll file
