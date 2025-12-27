@@ -30,6 +30,10 @@ export function useSignalR() {
     })
   }, 500)
 
+  const getFullHistoryDebounced = debounce(() => {
+    getFullHistory().catch(err => console.error('Failed to get full history:', err))
+  }, 500)
+
   const isConnected = computed(() => {
     const timeSinceLastMessage = Date.now() - (lastMessageReceived.value ?? 0)
     return timeSinceLastMessage < 15000 &&
@@ -40,15 +44,8 @@ export function useSignalR() {
 
   const startPeriodicLivelinessCheck = () => {
     const checkInterval = 2000
-    const maxQuietMs = 10000
     setInterval(() => {
-      ensureConnectedToEvent().then(() => {
-        let timeSinceLastMessage = Date.now() - (lastMessageReceived.value ?? 0)
-        if (timeSinceLastMessage > maxQuietMs) {
-          console.log(`It's been more than ${maxQuietMs}ms since the last received message`)
-          pingEvent()
-        }
-      })
+      ensureConnectedToEvent().catch(err => console.error('Failed to ensure connection:', err))
     }, checkInterval)
   }
 
@@ -148,6 +145,9 @@ export function useSignalR() {
       store.event.nextToken = Math.max(store.event.nextToken, token + 1)
       lastMessageReceived.value = Date.now()
       console.log('Received tokenUsed:', msgSourceId, eventId, token)
+
+      // Fetch latest data from server
+      getFullHistoryDebounced()
     })
 
     store.hubConnection.on('resetEvent', (msgSourceId, eventId) => {
@@ -155,6 +155,9 @@ export function useSignalR() {
       store.event.currentToken = 0
       lastMessageReceived.value = Date.now()
       console.log('Received resetEvent:', msgSourceId, eventId)
+
+      // Fetch latest data from server (should be empty after reset)
+      getFullHistoryDebounced()
     })
 
     store.hubConnection.on('deviceAddedToEvent', (msgSourceId, eventId) => {
@@ -169,6 +172,9 @@ export function useSignalR() {
 
       lastMessageReceived.value = Date.now()
       console.log('Received deviceAddedToEvent:', msgSourceId, eventId)
+
+      // Fetch latest data from server when new device joins
+      getFullHistoryDebounced()
     })
 
     store.hubConnection.on('setEventDetails', (msgSourceId, eventId, eventName, nextToken) => {
@@ -183,11 +189,9 @@ export function useSignalR() {
       }
       lastMessageReceived.value = Date.now()
       console.log('Received setEventDetails:', msgSourceId, eventId, eventName, nextToken)
-    })
 
-    store.hubConnection.on('pingEvent', (msgSourceId, eventId) => {
-      lastMessageReceived.value = Date.now()
-      console.log('Received pingEvent:', msgSourceId, eventId)
+      // Fetch latest data from server
+      getFullHistoryDebounced()
     })
 
     store.hubConnection.on('tokenAssignments', (msgSourceId, eventId, assignments) => {
@@ -199,6 +203,9 @@ export function useSignalR() {
       console.log('Received tokenAssignments:', msgSourceId, eventId, assignments)
       mergeAssignments(assignments)
       lastMessageReceived.value = Date.now()
+
+      // Fetch latest data from server to ensure we have everything
+      getFullHistoryDebounced()
     })
 
     store.hubConnection.on('syncDigest', (msgSourceId, eventId, count, tokens) => {
@@ -218,12 +225,12 @@ export function useSignalR() {
       if (needsSync) {
         console.log('Out of sync detected! My tokens:', myTokens.length, 'Their tokens:', theirTokens.length)
         console.log('Requesting full history from server...')
-        setTimeout(() => {
-          getFullHistory()
-        }, Math.random() * 1000 + 500)
       }
 
       lastMessageReceived.value = Date.now()
+
+      // Fetch latest data from server
+      getFullHistoryDebounced()
     })
   }
 
@@ -308,12 +315,14 @@ export function useSignalR() {
     })
   }
 
-  const sendTokenUsed = async (token) => {
-    await ensureConnectedToEvent(store.event.id)
-    await performPost('SendTokenUsed', {
-      eventId: store.event.id,
-      token: token
-    })
+  const sendTokenUsed = (token) => {
+    // Fire-and-forget - don't block the UI
+    ensureConnectedToEvent(store.event.id)
+      .then(() => performPost('SendTokenUsed', {
+        eventId: store.event.id,
+        token: token
+      }))
+      .catch(err => console.error('Failed to send token used:', err))
   }
 
   const joinEvent = async () => {
@@ -379,13 +388,6 @@ export function useSignalR() {
   const sendEventDetails = async (eventName, nextToken) => {
     await ensureConnectedToEvent(store.event.id)
     sendEventDetailsDebounced(eventName, nextToken)
-  }
-
-  const pingEvent = async () => {
-    await ensureConnectedToEvent(store.event.id)
-    await performPost('PingEvent', {
-      eventId: store.event.id
-    })
   }
 
   const inferEntryMethod = (athleteId) => {
@@ -512,7 +514,6 @@ export function useSignalR() {
     sendTokenUsed,
     resetEvent,
     sendEventDetails,
-    pingEvent,
     sendTokenAssignments,
     getRecentAssignments,
     getFullHistory,

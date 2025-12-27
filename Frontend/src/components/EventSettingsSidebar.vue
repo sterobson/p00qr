@@ -1,5 +1,5 @@
 <template>
-  <aside v-if="show" id="event-settings-menu">
+  <aside v-if="show" id="event-settings-menu" class="open">
     <h1>Event settings</h1>
     <main>
       <div class="top-row">

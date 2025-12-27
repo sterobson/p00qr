@@ -14,7 +14,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useBarcodeScanner } from '../../composables/useBarcodeScanner'
 
-const emit = defineEmits(['save'])
+const emit = defineEmits(['save', 'change'])
 
 const videoRef = ref(null)
 const scannedBarcode = ref('')
@@ -22,6 +22,7 @@ const { startScanning, stopScanning } = useBarcodeScanner()
 
 const handleScan = (result) => {
   scannedBarcode.value = result.text
+  emit('change', true)
   stopScanning()
 }
 

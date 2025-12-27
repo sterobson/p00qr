@@ -91,8 +91,7 @@ h1 {
     }
 }
 
-#code-label,
-#nocode-label {
+#code-label {
     font-size: calc(var(--default-font-size) * 1);
     font-weight: 700;
     text-align: center;
@@ -103,6 +102,27 @@ h1 {
 
     &.hide {
         display: none;
+    }
+}
+
+#pick-token-btn {
+    font-size: calc(var(--default-font-size) * 0.75);
+    font-weight: 700;
+    text-align: center;
+    margin: 0.5rem auto;
+    padding: 0.5rem 1.5rem;
+    height: 2.5rem;
+    width: auto;
+    background: #2e2966;
+    color: white;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(46, 41, 102, 0.3);
+
+    &:active {
+        background: #f41c5e;
+        transform: scale(0.98);
     }
 }
 
@@ -572,6 +592,26 @@ aside.open {
             height: 100%;
             object-fit: contain;
         }
+
+        .qr-placeholder {
+            width: 100%;
+            height: 100%;
+            background-color: #fff;
+            background-image:
+                /* Top-left finder pattern */
+                radial-gradient(circle at 15% 15%, #000 0%, #000 8%, transparent 8%, transparent 12%, #000 12%, #000 20%, transparent 20%),
+                /* Top-right finder pattern */
+                radial-gradient(circle at 85% 15%, #000 0%, #000 8%, transparent 8%, transparent 12%, #000 12%, #000 20%, transparent 20%),
+                /* Bottom-left finder pattern */
+                radial-gradient(circle at 15% 85%, #000 0%, #000 8%, transparent 8%, transparent 12%, #000 12%, #000 20%, transparent 20%),
+                /* Data pattern - random looking squares */
+                repeating-linear-gradient(45deg, #000 0px, #000 1px, transparent 1px, transparent 3px),
+                repeating-linear-gradient(-45deg, #000 0px, #000 1px, transparent 1px, transparent 3px),
+                repeating-linear-gradient(0deg, transparent 0px, transparent 2px, #000 2px, #000 3px, transparent 3px, transparent 5px),
+                repeating-linear-gradient(90deg, transparent 0px, transparent 2px, #000 2px, #000 3px, transparent 3px, transparent 5px);
+            background-size: 100% 100%, 100% 100%, 100% 100%, 4px 4px, 4px 4px, 6px 6px, 6px 6px;
+            opacity: 0.35;
+        }
     }
 
     .token-number {
@@ -636,6 +676,64 @@ aside.open {
     opacity: 0;
 }
 
+/* Animating token overlay */
+.animating-token-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.animating-token {
+    width: 80vw;
+    max-width: 400px;
+    aspect-ratio: 1;
+    background: white;
+    border: 6px solid #28a745;
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+
+    &.animate {
+        animation: shrinkToGrid 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    .token-number {
+        background: rgba(255, 255, 255, 0.95);
+        color: #000;
+        font-family: 'Fira Mono', monospace;
+        font-size: clamp(2rem, 8vw, 4rem);
+        font-weight: 700;
+        padding: 1rem 2rem;
+        border-radius: 0.5rem;
+        border: 4px solid #000;
+        white-space: nowrap;
+    }
+}
+
+@keyframes shrinkToGrid {
+    0% {
+        transform: translate(0, 0) scale(1);
+        opacity: 1;
+    }
+    100% {
+        /* Move to the target position and scale down to match grid item size */
+        transform: translate(
+            calc(var(--target-x) - 50vw),
+            calc(var(--target-y) - 50vh)
+        ) scale(var(--target-scale));
+        opacity: 1;
+    }
+}
+
 .done-button {
     background: #2e2966;
     color: white;
@@ -686,12 +784,21 @@ aside.open {
 }
 
 /* Scan mode */
+.scan-mode {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
 #video {
     max-width: 90vw;
     max-height: 50vh;
     border: 2px solid #2e2966;
     border-radius: 1rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    display: block;
+    margin: 0 auto;
 }
 
 .confirmation {
@@ -730,6 +837,38 @@ aside.open {
     align-items: center;
     width: 100%;
     padding: 0;
+}
+
+.manual-mode {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.manual-mode form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.input-group {
+    width: 80vw;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 0.5rem;
+
+    label {
+        align-self: flex-start;
+        margin-bottom: 0.25rem;
+    }
+
+    input {
+        width: 100%;
+        margin: 0;
+    }
 }
 
 /* QR mode uses existing #qr styling */

@@ -41,17 +41,9 @@ export class SignalRService {
     // Every few seconds we should check that the connection is still alive.
     _startPeriodicLivelinessCheck() {
         const checkInterval = 2000;
-        const maxQuietMs = 10000;
         setInterval(() => {
-            this.ensureConnectedToEvent().then(() => {
-                // If we haven't received a message in a little while, send out a PING to ensure we're still alive.
-                let timeSinceLastMessageReceived = Date.now() - (this._lastMessageReceived ?? 0);
-                if(timeSinceLastMessageReceived > maxQuietMs) {
-                    console.log(`It's been more than ${maxQuietMs}ms since the last received message`);
-                    this.pingEvent();
-                }
-            })}, checkInterval
-        );
+            this.ensureConnectedToEvent().catch(err => console.error('Failed to ensure connection:', err));
+        }, checkInterval);
     }
 
     async ensureConnectedToEvent() {
@@ -192,12 +184,6 @@ export class SignalRService {
                     }
                     this._lastMessageReceived = Date.now();
                     console.log('Received setEventDetails:', messageSourceId, eventId, eventName, nextToken, this.state);
-                });
-
-                // A device somewhere, possibly this one, has pinged the event. Whatever the reason, we now know that we're active.
-                this.state.hubConnection.on('pingEvent', (messageSourceId, eventId) => {
-                    this._lastMessageReceived = Date.now();
-                    console.log('Received pingEvent:', messageSourceId, eventId, this.state);
                 });
 
                 // Token assignments have been updated. Merge with local state using conflict resolution.
@@ -428,11 +414,6 @@ export class SignalRService {
     async sendEventDetails(eventName, nextToken) {
         await this.ensureConnectedToEvent(this.state.event.id);
         this._sendEventDetailsDebounced(eventName, nextToken);
-    }
-
-    async pingEvent() {
-        await this.ensureConnectedToEvent(this.state.event.id);
-        await this._performPost('PingEvent', {eventId: this.state.event.id});
     }
 
     _inferEntryMethod(athleteId) {

@@ -26,12 +26,12 @@
 
     <!-- Scan Mode -->
     <div v-if="currentMode === 'scan'" class="mode-content">
-      <ScanMode @save="handleSave" />
+      <ScanMode @save="handleSave" @change="handleChange" />
     </div>
 
     <!-- Manual Mode -->
     <div v-if="currentMode === 'manual'" class="mode-content">
-      <ManualMode :initial-data="initialData" @save="handleSave" />
+      <ManualMode :initial-data="initialData" @save="handleSave" @change="handleChange" />
     </div>
 
     <!-- QR Mode -->
@@ -51,7 +51,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useAppStore } from '../stores/app'
 import ScanMode from './modes/ScanMode.vue'
 import ManualMode from './modes/ManualMode.vue'
@@ -62,7 +62,7 @@ const props = defineProps({
   isEditing: Boolean
 })
 
-const emit = defineEmits(['close', 'delete', 'save'])
+const emit = defineEmits(['close', 'delete', 'save', 'change'])
 
 const store = useAppStore()
 
@@ -90,5 +90,9 @@ const saveConfirmationToken = computed(() => {
 
 const handleSave = (data) => {
   emit('save', data)
+}
+
+const handleChange = (hasChanges) => {
+  emit('change', hasChanges)
 }
 </script>

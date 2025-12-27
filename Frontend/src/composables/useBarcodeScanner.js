@@ -22,26 +22,36 @@ export function useBarcodeScanner() {
       initScanner()
     }
 
-    if (selectedDeviceId.value === null) {
-      const videoInputDevices = await scanner.value.listVideoInputDevices()
-      if (videoInputDevices && videoInputDevices.length > 0) {
-        const rearCamera = videoInputDevices.find(device =>
-          device.kind === 'videoinput' &&
-          /back|rear/i.test(device.label)
-        )
+    try {
+      if (selectedDeviceId.value === null) {
+        const videoInputDevices = await scanner.value.listVideoInputDevices()
+        console.log('Video input devices:', videoInputDevices)
+        if (videoInputDevices && videoInputDevices.length > 0) {
+          const rearCamera = videoInputDevices.find(device =>
+            device.kind === 'videoinput' &&
+            /back|rear/i.test(device.label)
+          )
 
-        selectedDeviceId.value = rearCamera?.deviceId || videoInputDevices[0].deviceId
+          selectedDeviceId.value = rearCamera?.deviceId || videoInputDevices[0].deviceId
+          console.log('Selected camera:', selectedDeviceId.value)
+        }
       }
+
+      isScanning.value = true
+      let lastResult = null
+      await scanner.value.decodeFromVideoDevice(selectedDeviceId.value, videoElementId, (result, err) => {
+        if (result && result !== lastResult && onDetected) {
+          lastResult = result
+          onDetected(result)
+        }
+        if (err && err.name !== 'NotFoundException') {
+          console.error('Barcode scanning error:', err)
+        }
+      })
+    } catch (error) {
+      console.error('Failed to start camera:', error)
+      isScanning.value = false
     }
-
-    isScanning.value = true
-    let lastResult = null
-    scanner.value.decodeFromVideoDevice(selectedDeviceId.value, videoElementId, (result, err) => {
-      if (result && result !== lastResult && onDetected) {
-        lastResult = result
-        onDetected(result)
-      }
-    })
   }
 
   const stopScanning = () => {

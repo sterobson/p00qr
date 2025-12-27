@@ -1,5 +1,5 @@
 <template>
-  <aside v-if="show" id="about-menu">
+  <aside v-if="show" id="about-menu" class="open">
     <h1>About</h1>
     <main>
       <div class="top-row">
