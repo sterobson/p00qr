@@ -13,7 +13,10 @@
       "Bash(npm install)",
       "Bash(npm run build:*)",
       "Bash(ls:*)",
-      "Bash(git remote get-url:*)"
+      "Bash(git remote get-url:*)",
+      "Bash(git fetch:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git remote set-url:*)"
     ]
   }
 }
