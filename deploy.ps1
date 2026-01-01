@@ -126,6 +126,101 @@ $selectedConfig = $config[$Environment]
 $deploymentSuccess = $true
 
 # ============================================================================
+# Check for uncommitted/unpushed changes (Production only)
+# ============================================================================
+if ($Environment -eq "production") {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Info "  Checking Git Status"
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    # Check for uncommitted changes (staged and unstaged)
+    $uncommittedChanges = git status --porcelain
+
+    # Check for unpushed commits
+    git fetch origin main 2>&1 | Out-Null
+    $unpushedCommits = git log origin/main..HEAD --oneline
+
+    $hasUncommitted = $uncommittedChanges -and $uncommittedChanges.Count -gt 0
+    $hasUnpushed = $unpushedCommits -and $unpushedCommits.Count -gt 0
+
+    if ($hasUncommitted -or $hasUnpushed) {
+        if ($hasUncommitted) {
+            Write-Warning "You have uncommitted changes:"
+            Write-Host ""
+            $uncommittedChanges | ForEach-Object { Write-Gray "  $_" }
+            Write-Host ""
+        }
+
+        if ($hasUnpushed) {
+            Write-Warning "You have unpushed commits:"
+            Write-Host ""
+            $unpushedCommits | ForEach-Object { Write-Gray "  $_" }
+            Write-Host ""
+        }
+
+        Write-Warning "Would you like to commit and push before deploying?"
+        Write-Host "  1. Yes - commit and push all changes" -ForegroundColor White
+        Write-Host "  2. No - deploy without committing (changes won't be in repo)" -ForegroundColor White
+        Write-Host "  3. Cancel - abort deployment" -ForegroundColor White
+        Write-Host ""
+
+        $choice = Read-Host "Enter choice (1, 2, or 3)"
+
+        switch ($choice) {
+            "1" {
+                if ($hasUncommitted) {
+                    Write-Host ""
+                    $commitMessage = Read-Host "Enter commit message"
+
+                    if (-not $commitMessage -or $commitMessage.Trim() -eq "") {
+                        Write-ErrorMessage "Commit message cannot be empty. Aborting."
+                        exit 1
+                    }
+
+                    Write-Info "Staging all changes..."
+                    git add -A 2>&1 | Out-Null
+
+                    Write-Info "Committing..."
+                    git commit -m $commitMessage 2>&1 | Out-Null
+
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-ErrorMessage "Failed to commit changes"
+                        exit 1
+                    }
+                    Write-Success "Changes committed"
+                }
+
+                Write-Info "Pushing to origin/main..."
+                git push origin main 2>&1 | Out-Null
+
+                if ($LASTEXITCODE -ne 0) {
+                    Write-ErrorMessage "Failed to push to origin/main"
+                    exit 1
+                }
+                Write-Success "Changes pushed to origin/main"
+                Write-Host ""
+            }
+            "2" {
+                Write-Warning "Continuing without committing. Your changes will be deployed but not saved to the repository."
+                Write-Host ""
+            }
+            "3" {
+                Write-Info "Deployment cancelled."
+                exit 0
+            }
+            default {
+                Write-ErrorMessage "Invalid choice. Aborting."
+                exit 1
+            }
+        }
+    } else {
+        Write-Success "Working directory is clean and up to date with origin/main"
+    }
+}
+
+# ============================================================================
 # Local Backend - Start Azure Functions
 # ============================================================================
 if ($Environment -eq "local" -and $Backend) {
@@ -297,43 +392,6 @@ if ($Environment -eq "production" -and $Frontend) {
     Set-Content -Path $versionFile -Value $versionContent
     Write-Success "Version updated to: $newVersion"
     Write-Host ""
-
-    # Check if there are uncommitted changes in frontend source files
-    $gitStatus = git status --porcelain
-    $frontendChanges = $gitStatus | Where-Object {
-        $_ -match '^\s*M.*Frontend/src/' -or
-        $_ -match '^\s*M.*Frontend/.*\.(html|js|json|vue)$' -or
-        $_ -match '^\s*M.*Frontend/scripts/' -or
-        $_ -match '^\s*M.*Frontend/public/'
-    }
-
-    if ($frontendChanges) {
-        Write-Warning "Found uncommitted frontend source changes."
-        Write-Info "Automatically committing and pushing to main branch..."
-
-        # Add all frontend-related source changes
-        git add Frontend/src/ Frontend/index-vue.html Frontend/vite.config.js Frontend/package.json Frontend/scripts/ Frontend/public/ 2>&1 | Out-Null
-
-        # Commit with timestamp
-        $commitMessage = "Deploy frontend changes - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-        git commit -m $commitMessage 2>&1 | Out-Null
-
-        if ($LASTEXITCODE -eq 0) {
-            Write-Gray "Pushing to origin/main..."
-            git push origin main 2>&1 | Out-Null
-
-            if ($LASTEXITCODE -eq 0) {
-                Write-Success "Changes committed and pushed to main branch"
-            } else {
-                Write-ErrorMessage "Failed to push to origin/main"
-                $deploymentSuccess = $false
-            }
-        } else {
-            Write-Warning "No changes to commit (possibly already committed)"
-        }
-    } else {
-        Write-Success "No uncommitted frontend source changes"
-    }
 
     if ($deploymentSuccess) {
         try {

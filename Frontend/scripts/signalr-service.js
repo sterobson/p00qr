@@ -64,8 +64,10 @@ export class SignalRService {
                 reconnected = true;
             }
 
-            if(reconnected) {
-                console.log(`SignalR was reconnected, so adding to event ${this.state.event.id}`);
+            // Check if we reconnected OR if the event ID changed (switching to a different event)
+            const eventChanged = previousConnectedEventId !== this.state.event.id;
+            if(reconnected || eventChanged) {
+                console.log(`SignalR ${reconnected ? 'reconnected' : 'event changed'}, so adding to event ${this.state.event.id}`);
 
                 // If the connection is already in a different group, remove it first, otherwise we might get
                 // messages for multiple events, which isn't ideal.
@@ -77,6 +79,10 @@ export class SignalRService {
                 await this._joinEvent();
                 this._connectedEventId = this.state.event.id;
                 this.state.connectionId = this.state.hubConnection.connectionId;
+
+                // Query Azure Tables for the definitive state immediately after joining
+                // This ensures we get the correct nextToken even if no other devices are online
+                await this._syncNextTokenWithAzureTables();
 
                 // Request full history from all other devices
                 // Add a small delay to ensure we're ready to receive responses
@@ -141,6 +147,9 @@ export class SignalRService {
                     this.state.event.nextToken = Math.max(this.state.event.nextToken, token + 1);
                     this._lastMessageReceived = Date.now();
                     console.log('Received tokenUsed:', messageSourceId, eventId, token, this.state);
+
+                    // Query Azure Tables for the definitive state
+                    this._syncNextTokenWithAzureTables();
                 }); 
 
                 // The event has been reset to a certain token. Set that as the next token, and
@@ -150,6 +159,9 @@ export class SignalRService {
                     this.state.event.currentToken = 0;
                     this._lastMessageReceived = Date.now();
                     console.log('Received resetEvent:', messageSourceId, eventId, this.state);
+
+                    // Query Azure Tables for the definitive state
+                    this._syncNextTokenWithAzureTables();
                 });
 
                 // A new device has been added to an event. Only respond if we have useful state.
@@ -184,6 +196,9 @@ export class SignalRService {
                     }
                     this._lastMessageReceived = Date.now();
                     console.log('Received setEventDetails:', messageSourceId, eventId, eventName, nextToken, this.state);
+
+                    // Query Azure Tables for the definitive state
+                    this._syncNextTokenWithAzureTables();
                 });
 
                 // Token assignments have been updated. Merge with local state using conflict resolution.
@@ -199,6 +214,9 @@ export class SignalRService {
                     this._mergeAssignments(assignments);
 
                     this._lastMessageReceived = Date.now();
+
+                    // Query Azure Tables for the definitive state
+                    this._syncNextTokenWithAzureTables();
                 });
 
                 // A new device is requesting full history from all devices
@@ -283,7 +301,41 @@ export class SignalRService {
     }
 
     async _performGet(endpointName, queryParams) {
-        return await this._performRequest('GET', endpointName, queryParams, true)
+        const base = window.FUNCTIONS_URL || `https://${location.hostname}`;
+        const url = new URL(`/api/${endpointName}`, base);
+
+        await this._ensureLocalHostKey();
+        await this._ensureFunctionKey();
+
+        if (this.state.functionKey)
+            url.searchParams.set('code', encodeURIComponent(this.state.functionKey));
+
+        // Add query parameters to URL for GET requests
+        if (queryParams) {
+            Object.keys(queryParams).forEach(key => {
+                url.searchParams.set(key, queryParams[key]);
+            });
+        }
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (this.state.functionKey) headers['x-functions-key'] = this.state.functionKey;
+        if (this.state.localHostKey) headers['x-local-host-key'] = this.state.localHostKey;
+
+        try {
+            const res = await fetch(url.toString(), {
+                method: 'GET',
+                headers
+            });
+
+            if (!res.ok) {
+                console.log(`${endpointName} failed: ` + res.status);
+            }
+
+            return res;
+        } catch (err) {
+            console.log(`${endpointName} failed: ${err}`);
+            return {};
+        }
     }
 
     async _performPost(endpointName, queryParams) {
@@ -354,6 +406,27 @@ export class SignalRService {
 
     async _joinEvent() {
         await this._performPost('JoinEvent', {eventId: this.state.event.id});
+    }
+
+    async _syncNextTokenWithAzureTables() {
+        try {
+            const res = await this._performGet('GetHighestToken', { eventId: this.state.event.id });
+            if (res.ok) {
+                const data = await res.json();
+                const highestToken = data.highestToken || 0;
+                const nextToken = highestToken + 1;
+
+                // Update nextToken based on Azure Tables (the source of truth)
+                if (this.state.event.nextToken !== nextToken) {
+                    console.log(`Syncing nextToken from Azure Tables: ${this.state.event.nextToken} -> ${nextToken}`);
+                    this.state.event.nextToken = nextToken;
+                }
+            } else {
+                console.warn('Failed to sync nextToken with Azure Tables:', res.status);
+            }
+        } catch (err) {
+            console.error('Error syncing nextToken with Azure Tables:', err);
+        }
     }
 
     async _ensureLocalHostKey() {
