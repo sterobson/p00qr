@@ -52,7 +52,7 @@ $config = @{
     }
     production = @{
         Frontend = @{
-            Url = "https://sterobson.github.io/p00qr/"
+            Url = "https://sterobson.github.io/parkrunPositionQrCode/"
         }
         Backend = @{
             AppName = "sterobson-personal"
